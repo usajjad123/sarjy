@@ -1,7 +1,6 @@
 import { GoogleGenAI, type LiveServerMessage, type Session } from "@google/genai";
 import { arrayBufferToBase64, float32ToPCM16 } from "../audio";
-import { conversationContext, type Workspace } from "../../trips/model";
-import type { WeatherReport, TripExperience } from "../../trips/weather";
+import { conversationContext, type Workspace } from "../../../features/food-logging/model";
 import { SpeechActivityDetector } from "../speech-activity";
 import type { RealtimeProvider } from "../provider";
 import type { VoiceEvent, VoiceState } from "../types";
@@ -27,7 +26,6 @@ export class GeminiLiveProvider implements RealtimeProvider {
   private userSpeech = new SpeechActivityDetector();
   private speechActivity = { user: false, assistant: false };
   private workspaceVersion = 0;
-  private activeTripId: string | null = null;
   private uiRevision = 0;
   private sessionNonce = "";
   private toolQueue = Promise.resolve();
@@ -95,7 +93,6 @@ export class GeminiLiveProvider implements RealtimeProvider {
       if (generation !== this.generation) { session.close(); return; }
       this.session = session;
       this.workspaceVersion = body.workspace.version;
-      this.activeTripId = body.workspace.activeTripId;
       this.emit({ type: "workspace", workspace: body.workspace });
       this.emit({ type: "state", state: "listening" });
     } catch (error) {
@@ -146,8 +143,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
   syncWorkspace(workspace: Workspace) {
     if (workspace.version > this.workspaceVersion) this.uiRevision++;
     this.workspaceVersion = workspace.version;
-    this.activeTripId = workspace.activeTripId;
-    this.session?.sendClientContent({ turns: [{ role: "user", parts: [{ text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(conversationContext(workspace))}. Read get_trip_context before your next trip edit.` }] }], turnComplete: false });
+    this.session?.sendClientContent({ turns: [{ role: "user", parts: [{ text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(conversationContext(workspace))}. Read get_nutrition_context before your next food edit.` }] }], turnComplete: false });
   }
 
   private async executeTool(id: string, name: string, args: Record<string, unknown>, generation: number, uiRevision: number) {
@@ -158,23 +154,22 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.emit({ type: "tool_state", busy: true, name });
     let result: Record<string, unknown>;
     try {
-      if (name !== "get_trip_context" && uiRevision !== this.uiRevision) throw new Error("The UI changed after this tool was requested");
-      const response = await fetch("/api/trip-action", { method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal, body: JSON.stringify({ name, args, targetTripId: this.activeTripId, expectedVersion: this.workspaceVersion, callId: `${this.sessionNonce}:${id}` }) });
+      if (name !== "get_nutrition_context" && uiRevision !== this.uiRevision) throw new Error("The UI changed after this tool was requested");
+      const response = await fetch("/api/food-action", { method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal, body: JSON.stringify({ name, args, expectedVersion: this.workspaceVersion, callId: `${this.sessionNonce}:${id}` }) });
       result = await response.json();
       if (generation !== this.generation) return;
       if (response.ok && result.workspace) {
         const workspace = result.workspace as Workspace;
         this.workspaceVersion = workspace.version;
-        this.activeTripId = workspace.activeTripId;
-        this.emit({ type: "workspace", workspace, weather: result.weather as WeatherReport | null, experience: result.experience as TripExperience | null, action: name });
+        this.emit({ type: "workspace", workspace, action: name });
         const { workspace: _workspace, ...toolResult } = result;
         void _workspace;
-        result = { ...toolResult, context: conversationContext(workspace) };
+        result = { ...toolResult, context: result.context || conversationContext(workspace) };
       } else if (response.status === 409) {
         const fresh = await fetch("/api/workspace", { cache: "no-store" }).then((res) => res.json());
         if (generation !== this.generation) return;
-        if (fresh.workspace) { this.workspaceVersion = fresh.workspace.version; this.activeTripId = fresh.workspace.activeTripId; this.emit({ type: "workspace", workspace: fresh.workspace }); }
-        result = { ...result, status: "conflict", saved: false, instruction: "Read get_trip_context and reconsider the requested edit against the current state." };
+        if (fresh.workspace) { this.workspaceVersion = fresh.workspace.version; this.emit({ type: "workspace", workspace: fresh.workspace }); }
+        result = { ...result, status: "conflict", saved: false, instruction: "Read get_nutrition_context and reconsider the requested edit against the current state." };
       } else result = { ...result, saved: false };
     } catch {
       result = { error: "Could not finish the tool request. Read current state before retrying; do not claim success.", saved: false };

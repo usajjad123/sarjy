@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import "./planner.css";
+import "./fit.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sarjy… your trip partner",
-  description: "Build a thoughtful itinerary with Sarjy, your voice-powered trip partner.",
+  title: "Sarjy Fit — Eat normally. Track effortlessly.",
+  description: "A voice-first nutrition tracker with verified food records, corrections, undo, and lasting memory.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

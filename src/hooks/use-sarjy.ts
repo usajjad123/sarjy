@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMotionValue } from "motion/react";
 import { GeminiLiveProvider } from "@/lib/realtime/gemini/GeminiLiveProvider";
 import type { VoiceEvent, VoiceState } from "@/lib/realtime/types";
-import type { Workspace } from "@/lib/trips/model";
+import type { Workspace } from "@/features/food-logging/model";
 export type Transcript = { role: "user" | "assistant"; text: string; complete: boolean };
 export function useSarjy(onWorkspace: (event: Extract<VoiceEvent, { type: "workspace" }>) => void) {
   const provider = useRef<GeminiLiveProvider | null>(null);

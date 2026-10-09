@@ -12,7 +12,7 @@ function compile(path, imports = {}) {
 }
 const providerModule = compile("../src/lib/realtime/gemini/GeminiLiveProvider.ts", {
   "@google/genai": dataModule("export class GoogleGenAI {}"),
-  "../../trips/model": compile("../src/lib/trips/model.ts"),
+  "../../../features/food-logging/model": dataModule("export const conversationContext = (w) => w;"),
   "../audio": compile("../src/lib/realtime/audio.ts"),
   "../speech-activity": compile("../src/lib/realtime/speech-activity.ts"),
   "./config": dataModule('export const LIVE_MODEL = "test"; export const liveConfig = {};'),

@@ -1,5 +1,4 @@
-import type { Workspace } from "../trips/model";
-import type { WeatherReport, TripExperience } from "../trips/weather";
+import type { Workspace } from "../../features/food-logging/model";
 
 export type VoiceState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
 export type VoiceEvent =
@@ -9,6 +8,6 @@ export type VoiceEvent =
   | { type: "microphone"; enabled: boolean }
   | { type: "user_transcript" | "assistant_transcript"; text: string }
   | { type: "turn_complete" }
-  | { type: "workspace"; workspace: Workspace; weather?: WeatherReport | null; experience?: TripExperience | null; action?: string }
+  | { type: "workspace"; workspace: Workspace; action?: string }
   | { type: "tool_state"; busy: boolean; name: string }
   | { type: "error"; error: Error };
