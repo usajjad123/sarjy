@@ -14,7 +14,20 @@ npm run dev -- --hostname 127.0.0.1 --port 3001
 
 Open http://127.0.0.1:3001. Gemini needs `GEMINI_API_KEY` with access to the configured Live model. Food lookup uses `USDA_API_KEY`; development falls back to USDA's official, heavily rate-limited `DEMO_KEY`. A real key is required in production. Keys only run on the server; the browser gets a short-lived constrained Gemini token.
 
-Configure `DATABASE_URL` to use PostgreSQL. Development without it uses a durable local SQLite database in `.data/sarjy-fit.db`. Production refuses local fallback. Both adapters execute the same validated commands with a compare-and-swap SQL update. Anonymous guests have a random HttpOnly SameSite cookie; they don't need accounts, and data is isolated by that cookie. Clearing cookies loses access; this isn't cross-device identity.
+Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to use Supabase Auth, PostgreSQL and private Storage. Sarjy creates an anonymous authenticated identity automatically, keeps session cookies HttpOnly and refreshes/verifies them in API Route Handlers. Food logs, drafts, goals, memories and reusable foods/meals are attached to that user; no signup screen is needed. Clearing cookies loses access to that anonymous identity. Account linking and cross-device recovery are future work.
+
+Apply `supabase/migrations/202610090001_sarjy_identity.sql` in your project's SQL editor and enable **Allow anonymous sign-ins** in Auth settings. Alternatively, a server-only `SUPABASE_ACCESS_TOKEN` can run the setup below. That token is used only by the management script; the running app uses the publishable key and each user's verified session. A `DATABASE_URL` is not required with Supabase.
+
+```sh
+node scripts/supabase-admin.mjs inspect
+node scripts/supabase-admin.mjs enable-anonymous
+node scripts/supabase-admin.mjs migrate
+node scripts/supabase-admin.mjs verify
+```
+
+The `sarjy-labels` bucket is private, accepts PNG/JPEG/WebP up to 8 MB and restricts objects to their owner's UUID folder. Upload/extraction UI is not implemented yet. Development imports an existing browser's local SQLite record once, keeps the original backup and prevents another identity from claiming the same import. Initial requests share the session bootstrap so React's development effect replay cannot create competing accounts.
+
+Without Supabase, `DATABASE_URL` selects the legacy PostgreSQL adapter. Development without either uses `.data/sarjy-fit.db`; production refuses filesystem fallback. Use one configured adapter consistently.
 
 ## Working increment
 
@@ -30,7 +43,7 @@ Configure `DATABASE_URL` to use PostgreSQL. Development without it uses a durabl
 
 `features/nutrition/engine.ts` owns units and arithmetic. `features/food/usda.ts` searches SR Legacy/Foundation records and normalizes exact nutrient IDs/units. `features/food-logging/model.ts` is the pure state/command reducer; `store.ts` handles guest identity, persistence, limits and atomic version checks. `/api/food-action` is the only mutation endpoint. Gemini proposes commands; it cannot submit its own nutrient numbers. Voice and manual UI edits use identical validation and server state.
 
-The first database increment stores each guest's domain document in a PostgreSQL table (text JSON plus a version), rather than a fully normalized relational schema. One conditional update atomically commits the meal, nutrient snapshots, operations, focus and idempotency keys. This is intentionally small for the demo. Normalizing large histories and adding explicit schema migrations is a later production step. Undo retains the latest 20 intake/memory operations as before snapshots; undo clears the current draft to avoid applying it against restored state.
+Supabase stores each user's domain document as JSONB plus a version in `sarjy_workspaces`. Row-level security allows only that authenticated user to read their state. Direct table writes are denied; transactional RPCs derive the owner from `auth.uid()`, lock the row, check versions and replay keys, and commit the complete next state atomically. The app's reducer validates commands and calculates nutrition before this commit. This document model keeps a multistep workflow atomic; normalizing large histories is future work. Undo retains the latest 20 intake/memory operations as before snapshots; undo clears the current draft to avoid applying it against restored state.
 
 Food definitions and logged entries are separate snapshots. Replacing a usual meal never rewrites past consumption. Serving conversions need USDA gram weights; US volume units convert using standard ml factors disclosed in the portion label. Pieces with multiple sizes require an explicit portion ID. Real-world composition still varies: verified source data is not a claim of perfect individual-meal accuracy.
 
@@ -50,13 +63,14 @@ npm run lint
 npx tsc --noEmit
 npm run build -- --webpack
 node scripts/smoke-api.mjs # With the dev server running; creates isolated test guest records.
+node scripts/test-supabase.mjs # Live Auth/RLS/RPC/private-image checks using two new test users.
 ```
 
-40 representative deterministic workflow scenarios plus 5 existing audio/animation tests. API smoke checks live USDA resolution, exact quantity correction, undo, memory, retries, stale updates, guest isolation and origin checks. It prints per-command latency. Voice-to-commit success rates and resolution accuracy need a repeated live evaluation set; the 10-second logging target is not yet measured or achieved.
+40 representative deterministic workflow scenarios, 5 audio/animation tests and 2 session bootstrap regressions. API smoke checks live USDA resolution, exact quantity correction, undo, memory, retries, stale updates, user isolation and origin checks. Supabase checks cover legacy import ownership, concurrent commits, authenticated ownership of images and forged-cookie rejection. Test scripts create isolated fixture accounts/records; the image check removes only its own temporary image. The API script prints per-command latency. Voice-to-commit success rates and resolution accuracy need a repeated live evaluation set; the 10-second logging target is not yet measured or achieved.
 
 ## Next increments / deployment
 
-Connect real USDA credentials and a hosted PostgreSQL `DATABASE_URL`, validate that adapter against a live database, then deploy on Vercel with those values plus `GEMINI_API_KEY`. Production build passes; there is no public deployment yet. Use HTTPS for microphone access. Do not deploy with the development demo key or ephemeral filesystem storage.
+USDA credentials and live Supabase Auth/database/private Storage are connected and verified locally. Next, implement label uploads and user-defined foods, then deploy on Vercel with the two public Supabase settings, `USDA_API_KEY` and `GEMINI_API_KEY`. The deployment does not need `SUPABASE_ACCESS_TOKEN`. There is no public deployment yet. Use HTTPS for microphone access. Before public anonymous signup, configure abuse protection (Supabase recommends CAPTCHA/Turnstile); current per-user limits protect commands and Gemini token creation but do not prevent mass signup.
 
 Conversation captions currently last for the active browser page/session; logged food, preferences, saved meals and pending workflows persist in the database. Labels/photo extraction, meal-image estimation, medical advice, weight tracking and unsolicited coaching are outside this increment. No label upload is implemented.
 

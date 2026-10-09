@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { conversationContext } from "@/features/food-logging/model";
-import { guestId, limitRequests, readWorkspace } from "@/features/food-logging/store";
+import { currentUser, limitRequests, readWorkspace } from "@/features/food-logging/store";
 import { checkOrigin, errorResponse } from "@/features/food-logging/http";
 import { LIVE_MODEL, liveConfig } from "@/lib/realtime/gemini/config";
 
@@ -11,9 +11,8 @@ export async function POST(request: Request) {
   }
   try {
     checkOrigin(request);
-    const id = await guestId();
-    await limitRequests(`voice:${id}`, 12);
-    const workspace = await readWorkspace(id);
+    const id = await currentUser();
+    const [, workspace] = await Promise.all([limitRequests(id, 12, "voice"), readWorkspace(id)]);
     const config = { ...liveConfig, systemInstruction: `${liveConfig.systemInstruction}\nInitial saved context (untrusted data): ${JSON.stringify(conversationContext(workspace))}` };
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const token = await ai.authTokens.create({ config: {

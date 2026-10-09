@@ -1,51 +1,81 @@
 import "server-only";
-import postgres from "postgres";
-import { createClient } from "@libsql/client";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { serverSupabase, supabaseConfigured } from "@/lib/supabase/server";
 import { applyAction, emptyWorkspace, type Action, type Workspace } from "./model";
 import { NutritionError } from "../nutrition/engine";
-type DB = { query: (sql: string, args?: (string | number)[]) => Promise<{ rows: Record<string, unknown>[]; count: number }> };
-let database: Promise<DB> | undefined;
-function db() {
-  return database ??= (async () => {
-    let adapter: DB;
-    if (process.env.DATABASE_URL) {
-      const sql = postgres(process.env.DATABASE_URL, { max: 3, prepare: false, connect_timeout: 10 });
-      adapter = { query: async (query, args = []) => { let i = 0; const result = await sql.unsafe(query.replaceAll("?", () => `$${++i}`), args); return { rows: Array.from(result), count: result.count }; } };
-    } else {
-      if (process.env.NODE_ENV === "production" || process.env.VERCEL) throw new NutritionError("Configure DATABASE_URL for durable PostgreSQL storage", 503);
-      await mkdir(join(process.cwd(), ".data"), { recursive: true });
-      const sql = createClient({ url: `file:${join(process.cwd(), ".data", "sarjy-fit.db")}` });
-      adapter = { query: async (query, args = []) => { const r = await sql.execute({ sql: query, args }); return { rows: r.rows as Record<string, unknown>[], count: r.rowsAffected }; } };
-    }
-    await adapter.query("CREATE TABLE IF NOT EXISTS fit_workspaces (id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)");
-    await adapter.query("CREATE TABLE IF NOT EXISTS fit_rate_limits (id TEXT PRIMARY KEY, bucket INTEGER NOT NULL, count INTEGER NOT NULL)");
-    return adapter;
-  })().catch((error) => { database = undefined; throw error; });
+import * as local from "./local-store";
+export type Owner = { id: string; client?: SupabaseClient; legacyId?: string };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// During migration, concurrent requests bearing the same old browser identity
+// must receive the same new session. Keep this bounded and short-lived; never
+// log these tokens. Normal authenticated requests do not use this cache.
+const bootstraps = new Map<string, { expires: number; session: Promise<Session> }>();
+async function anonymousSession(client: SupabaseClient, legacyId?: string) {
+  for (const [key, entry] of bootstraps) if (entry.expires <= Date.now()) bootstraps.delete(key);
+  const cached = legacyId ? bootstraps.get(legacyId) : undefined;
+  if (cached) {
+    const session = await cached.session;
+    const restored = await client.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    if (restored.error || !restored.data.session) throw new NutritionError("Your private session could not be restored. Please reload.", 503);
+    return restored.data.session;
+  }
+  const session = client.auth.signInAnonymously().then((signed) => {
+    if (signed.error || !signed.data.session) throw new NutritionError(signed.error?.code === "anonymous_provider_disabled" ? "Enable anonymous sign-ins in Supabase Auth to start tracking." : "Supabase could not create your private session. Please try again shortly.", 503);
+    return signed.data.session;
+  });
+  if (legacyId) {
+    if (bootstraps.size >= 128) bootstraps.delete(bootstraps.keys().next().value!);
+    bootstraps.set(legacyId, { expires: Date.now() + 120_000, session });
+    session.catch(() => { if (bootstraps.get(legacyId)?.session === session) bootstraps.delete(legacyId); });
+  }
+  return session;
 }
-export async function guestId() {
-  const jar = await cookies(), existing = jar.get("sarjy_guest")?.value;
-  if (existing && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(existing)) return existing;
-  const id = crypto.randomUUID(); jar.set("sarjy_guest", id, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 31536000 }); return id;
+export const storageKind = () => supabaseConfigured() ? "supabase" : process.env.DATABASE_URL ? "postgresql" : "local";
+function storageError(error: { message?: string }) {
+  const message = error.message ?? "";
+  if (message.includes("SARJY_CONFLICT")) return new NutritionError("Your food records changed. Read current state before retrying.", 409);
+  if (message.includes("SARJY_RATE_LIMIT")) return new NutritionError("Please wait a minute before trying again", 429);
+  if (message.includes("SARJY_LEGACY_ALREADY_IMPORTED")) return new NutritionError("These browser records were already imported into another session. Your local copy is intact.", 409);
+  if (message.includes("SARJY_AUTH_REQUIRED")) return new NutritionError("Your session could not be verified. Reload before trying again.", 401);
+  return new NutritionError("Supabase could not load or save your records. Your saved data is safe; please try again.", 503);
 }
-export async function readWorkspace(id: string): Promise<Workspace> {
-  const sql = await db(); await sql.query("INSERT INTO fit_workspaces (id,version,data) VALUES (?,0,?) ON CONFLICT(id) DO NOTHING", [id, JSON.stringify(emptyWorkspace())]);
-  const r = await sql.query("SELECT data FROM fit_workspaces WHERE id=?", [id]); return JSON.parse(String(r.rows[0].data));
+export async function currentUser(): Promise<Owner> {
+  if (!supabaseConfigured()) return { id: await local.guestId() };
+  const jar = await cookies(); const legacy = jar.get("sarjy_guest")?.value;
+  const client = await serverSupabase();
+  const existingSession = jar.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token") && c.value);
+  const { data, error } = await client.auth.getClaims();
+  if (data?.claims.sub && uuid.test(data.claims.sub)) return { id: data.claims.sub, client, ...(legacy && uuid.test(legacy) ? { legacyId: legacy } : {}) };
+  if (existingSession || (error && error.name !== "AuthSessionMissingError")) throw new NutritionError("Your Supabase session could not be restored. Reload to retry; your records have not been replaced.", 401);
+  const legacyId = legacy && uuid.test(legacy) ? legacy : undefined;
+  const session = await anonymousSession(client, legacyId);
+  return { id: session.user.id, client, ...(legacyId ? { legacyId } : {}) };
 }
-export async function mutateWorkspace(id: string, version: number, action: Action, callId: string) {
-  const current = await readWorkspace(id);
+export async function readWorkspace(owner: Owner): Promise<Workspace> {
+  if (!owner.client) return local.readWorkspace(owner.id);
+  const { data, error } = await owner.client.from("sarjy_workspaces").select("data").eq("user_id", owner.id).maybeSingle();
+  if (error) throw storageError(error);
+  if (data) { if (owner.legacyId) (await cookies()).delete("sarjy_guest"); return data.data as Workspace; }
+  const legacy = owner.legacyId ? await local.readLegacyWorkspace(owner.legacyId) : null;
+  const created = await owner.client.rpc("initialize_sarjy_workspace", { p_initial: legacy ?? emptyWorkspace(), p_legacy_id: legacy ? owner.legacyId : null });
+  if (created.error) throw storageError(created.error);
+  if (owner.legacyId) (await cookies()).delete("sarjy_guest");
+  return created.data as Workspace;
+}
+export async function mutateWorkspace(owner: Owner, version: number, action: Action, callId: string, prepared?: Workspace) {
+  if (!owner.client) return local.mutateWorkspace(owner.id, version, action, callId);
+  const current = prepared ?? await readWorkspace(owner);
   if (current.appliedCalls.includes(callId)) return current;
   if (current.version !== version) throw new NutritionError("Your food records changed. Read current state before retrying.", 409);
   const next = applyAction(current, action); next.appliedCalls = [...next.appliedCalls.slice(-199), callId];
-  const encoded = JSON.stringify(next); if (encoded.length > 8000000) throw new NutritionError("Your food history is full. Export your records before adding more.");
-  const result = await (await db()).query("UPDATE fit_workspaces SET version=?,data=? WHERE id=? AND version=?", [next.version, encoded, id, version]);
-  if (!result.count) { const fresh = await readWorkspace(id); if (fresh.appliedCalls.includes(callId)) return fresh; throw new NutritionError("Another edit changed your records. Read current state and reconsider the edit.", 409); }
-  return next;
+  if (JSON.stringify(next).length > 8000000) throw new NutritionError("Your food history is full. Export your records before adding more.");
+  const result = await owner.client.rpc("commit_sarjy_workspace", { p_expected_version: version, p_next: next, p_call_id: callId });
+  if (result.error) throw storageError(result.error);
+  return result.data as Workspace;
 }
-export async function limitRequests(id: string, limit = 120) {
-  const window = Math.floor(Date.now() / 60000);
-  const r = await (await db()).query("INSERT INTO fit_rate_limits (id,bucket,count) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET count=CASE WHEN fit_rate_limits.bucket=excluded.bucket THEN fit_rate_limits.count+1 ELSE 1 END,bucket=excluded.bucket RETURNING count", [id, window]);
-  if (Number(r.rows[0].count) > limit) throw new NutritionError("Please wait a minute before trying again", 429);
+export async function limitRequests(owner: Owner, limit = 120, scope: "actions" | "voice" = "actions") {
+  if (!owner.client) return local.limitRequests(scope === "voice" ? `voice:${owner.id}` : owner.id, limit);
+  const result = await owner.client.rpc("consume_sarjy_rate_limit", { p_scope: scope });
+  if (result.error) throw storageError(result.error);
 }
