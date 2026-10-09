@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@google/genai": "^2.27.0",
+    "@libsql/client": "^0.18.0",
+    "bot-avatars": "^0.2.2",
+    "motion": "^14.0.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

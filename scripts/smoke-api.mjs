@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+const origin = process.env.SARJY_TEST_URL || "http://127.0.0.1:3001";
+const first = await fetch(`${origin}/api/workspace`);
+const initial = await first.json();
+assert.equal(first.status, 200, JSON.stringify(initial));
+const cookie = first.headers.get("set-cookie")?.split(";")[0];
+assert.ok(cookie);
+let workspace = initial.workspace;
+async function action(name, args, version = workspace.version) {
+  const response = await fetch(`${origin}/api/trip-action`, { method: "POST", headers: { "Content-Type": "application/json", cookie, origin }, body: JSON.stringify({ name, args, expectedVersion: version, includeWeather: false }) });
+  const body = await response.json();
+  if (response.ok) workspace = body.workspace;
+  return { status: response.status, body };
+}
+assert.equal((await action("create_trip", { destination: "Kyoto, Japan", startDate: new Date(Date.now() + 2*86400000).toISOString().slice(0,10), durationDays: 2, interests: ["food", "temples"], pace: "relaxed" })).status, 200);
+assert.equal((await action("add_activity", { day: 1, title: "A morning walk", time: "09:00", kind: "outdoors" })).status, 200);
+const activityId = workspace.trips[0].days[0].activities[0].id;
+assert.equal((await action("move_activity", { activityId, toDay: 2 })).status, 200);
+assert.equal(workspace.trips[0].days[1].activities[0].title, "A morning walk");
+assert.equal((await action("update_activity", { activityId, locked: true })).status, 200);
+assert.equal((await action("remove_activity", { activityId })).status, 400);
+assert.equal((await action("remember_fact", { key: "favorite_color", value: "sage green" })).status, 200);
+const saved = await fetch(`${origin}/api/workspace`, { headers: { cookie } }).then((response) => response.json());
+assert.equal(saved.workspace.memories[0].value, "sage green");
+assert.equal(saved.workspace.trips[0].days[1].activities[0].id, activityId);
+assert.equal((await action("update_trip", { title: "Stale edit" }, 0)).status, 409);
+const stranger = await fetch(`${origin}/api/workspace`).then((response) => response.json());
+assert.equal(stranger.workspace.trips.length, 0);
+assert.equal(stranger.workspace.memories.length, 0);
+const badOrigin = await fetch(`${origin}/api/trip-action`, { method: "POST", headers: { "Content-Type": "application/json", cookie, origin: "https://example.com" }, body: JSON.stringify({ name: "remember_fact", args: { key: "bad", value: "bad" }, expectedVersion: workspace.version }) });
+assert.equal(badOrigin.status, 403);
+const weatherResponse = await fetch(`${origin}/api/weather`, { headers: { cookie } });
+const report = await weatherResponse.json();
+assert.equal(weatherResponse.status, 200, JSON.stringify(report));
+console.log(JSON.stringify({ passed: ["anonymous cookie", "create trip", "add stop", "move stop", "fixed stop protection", "memory across requests", "stale edit rejection", "guest isolation", "origin check"], weather: { status: report.weather.status, location: report.weather.location, days: report.weather.days.length, message: report.weather.message }, experience: report.experience.title }, null, 2));

@@ -1,69 +1,128 @@
-import Image from "next/image";
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { MotionConfig } from "motion/react";
+import { PlannerDialog } from "@/components/planner-dialog";
+import { VoiceParticipant } from "@/components/voice-participant";
+import { useSarjy } from "@/hooks/use-sarjy";
+import { activeTrip, emptyWorkspace, isoDate, type Activity, type Workspace } from "@/lib/trips/model";
+import type { VoiceEvent } from "@/lib/realtime/types";
+import type { WeatherReport, TripExperience } from "@/lib/trips/weather";
 
+type Edit = { day: number; activity: Activity | null };
+function dateLabel(date: string, options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) { return new Date(`${date}T12:00:00`).toLocaleDateString("en", options); }
+function Icon({ name }: { name: "plus" | "mic" | "stop" | "sun" | "map" | "spark" | "check" | "arrow" }) {
+  const paths = { plus: "M12 5v14M5 12h14", mic: "M9 6a3 3 0 016 0v6a3 3 0 01-6 0V6m-3 4v2a6 6 0 0012 0v-2m-6 8v4m-3 0h6", stop: "M7 7h10v10H7z", sun: "M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6L7 7m10 10 1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4M16 12a4 4 0 11-8 0 4 4 0 018 0", map: "M8 5l8-2 5 3v15l-5-3-8 3-5-3V3l5 2m0 0v16m8-18v15", spark: "M12 3l2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3", check: "M5 12l4 4L19 6", arrow: "M5 12h14m-5-5 5 5-5 5" };
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+}
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const workspaceRef = useRef(workspace);
+  const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
+  const [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [dayIndex, setDayIndex] = useState(0);
+  const [newTrip, setNewTrip] = useState(false), [memoryOpen, setMemoryOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [editing, setEditing] = useState<Edit | null>(null);
+  const [weather, setWeather] = useState<WeatherReport | null>(null), [experience, setExperience] = useState<TripExperience | null>(null);
+  const [weatherBusy, setWeatherBusy] = useState(false), [weatherRefresh, setWeatherRefresh] = useState(0);
+  const [message, setMessage] = useState("");
+  const acceptWorkspace = useCallback((next: Workspace) => {
+    if (next.version < workspaceRef.current.version) return;
+    if (next.activeTripId !== workspaceRef.current.activeTripId) { setDayIndex(0); setWeather(null); setExperience(null); }
+    workspaceRef.current = next; setWorkspace(next);
+  }, []);
+  const onVoiceWorkspace = useCallback((event: Extract<VoiceEvent, { type: "workspace" }>) => {
+    if (event.workspace.version < workspaceRef.current.version) return;
+    acceptWorkspace(event.workspace);
+    if (event.weather) { setWeather(event.weather); setExperience(event.experience || null); }
+    if (event.action && event.action !== "get_trip_context") setNotice(event.action === "remember_fact" ? "Preference remembered for your next trip" : "Itinerary saved");
+  }, [acceptWorkspace]);
+  const voice = useSarjy(onVoiceWorkspace);
+  const trip = activeTrip(workspace);
+  const day = trip?.days[Math.min(dayIndex, trip.days.length - 1)];
+  const currentWeather = weather?.days.find((forecast) => forecast.date === day?.date);
+  const disabled = saving || loading || !!voice.tool;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/workspace", { cache: "no-store" }).then(async (response) => {
+      const body = await response.json(); if (!response.ok) throw new Error(body.error);
+      if (!cancelled) acceptWorkspace(body.workspace);
+    }).catch((error) => { if (!cancelled) setError(error.message); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [acceptWorkspace]);
+
+  useEffect(() => {
+    if (!workspace.activeTripId) return;
+    const abort = new AbortController();
+    const expectedVersion = workspace.version;
+    const timer = setTimeout(() => { setWeatherBusy(true); }, 0);
+    fetch(`/api/weather${weatherRefresh ? "?refresh=1" : ""}`, { signal: abort.signal, cache: "no-store" }).then(async (response) => {
+      const body = await response.json(); if (!response.ok) throw new Error(body.error);
+      if (workspaceRef.current.version === expectedVersion && workspaceRef.current.activeTripId === body.tripId) { setWeather(body.weather); setExperience(body.experience); }
+    }).catch((error) => { if (!abort.signal.aborted) { setWeather(null); setExperience(null); setError(error.message); } }).finally(() => { if (!abort.signal.aborted) setWeatherBusy(false); });
+    return () => { clearTimeout(timer); abort.abort(); };
+  }, [workspace.version, workspace.activeTripId, weatherRefresh]);
+
+  async function saveAction(name: string, args: Record<string, unknown>) {
+    setSaving(true); setError("");
+    try {
+      const response = await fetch("/api/trip-action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, args, targetTripId: workspaceRef.current.activeTripId, expectedVersion: workspaceRef.current.version, includeWeather: false }) });
+      const body = await response.json();
+      if (!response.ok) {
+        if (response.status === 409) { const fresh = await fetch("/api/workspace").then((response) => response.json()); if (fresh.workspace) acceptWorkspace(fresh.workspace); }
+        throw new Error(body.error || "Could not save the edit");
+      }
+      acceptWorkspace(body.workspace); voice.sync(body.workspace);
+      setNotice(name === "remember_fact" ? "Preference remembered" : name === "forget_fact" ? "Memory removed" : "Saved to your itinerary");
+      return true;
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not save"); return false; }
+    finally { setSaving(false); }
+  }
+
+  function exportTrip() {
+    if (!trip) return;
+    const file = new Blob([JSON.stringify(trip, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(file), anchor = document.createElement("a"); anchor.href = url; anchor.download = `${trip.title.replace(/[^a-z0-9]/gi, "-")}.json`; anchor.click(); URL.revokeObjectURL(url);
+  }
+  const defaultDate = isoDate(new Date().toISOString().slice(0, 10), 7);
+  const latestReply = voice.transcript.findLast((item) => item.role === "assistant")?.text;
+  const prompt = trip ? `Build a thoughtful ${trip.durationDays}-day itinerary for my saved ${trip.destination} trip. Use my dates and interests. Save each day, then tell me how the trip might feel based on the weather.` : "Help me plan my next trip. Ask me for the details you need.";
+
+  return <MotionConfig reducedMotion="user"><div className="trip-app">
+    <header className="trip-header"><span className="wordmark">sarjy<span>✳</span></span><span className="brand-tagline">your trip partner.</span><div className="header-right"><span className="browser-memory"><Icon name="check" />No account. Just your plans.</span><button onClick={() => setMemoryOpen(true)} className="travel-style"><Icon name="spark" />My travel style<span>{workspace.memories.length}</span></button></div></header>
+    <div className="planner-layout">
+      <aside className="trip-library"><div className="library-heading"><span>MY TRIPS</span><span>{workspace.trips.length.toString().padStart(2,"0")}</span></div><button className="new-trip-button" onClick={() => setNewTrip(true)} disabled={disabled}><Icon name="plus" />Plan a new trip</button>
+        <nav aria-label="Saved trips">{workspace.trips.map((item, index) => <button className={`library-trip ${item.id === trip?.id ? "selected" : ""}`} disabled={disabled} key={item.id} onClick={async () => { if (await saveAction("select_trip", { tripId: item.id })) { setDayIndex(0); setWeather(null); setExperience(null); } }}><span className={`trip-mini-art art-${index % 3}`}><Icon name="map" /></span><span><strong>{item.title}</strong><small>{dateLabel(item.startDate)} · {item.durationDays} days</small></span>{item.id === trip?.id && <span className="selected-dot" />}</button>)}</nav>
+        {!workspace.trips.length && <p className="library-empty">A little anticipation.<br />A whole lot of possibility.</p>}
+        <div className="library-footer"><span className="status-dot active" />Saved for this browser<p>Your plans and preferences will be here when you come back.</p></div>
+      </aside>
+      <main id="trip-itinerary" className="itinerary-workspace">
+        {(error || notice) && <div className={`save-banner ${error ? "is-error" : ""}`} role={error ? "alert" : "status"}><span>{error || (saving ? "Saving…" : notice)}</span><button aria-label="Dismiss notification" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
+        {loading ? <div className="loading-state">Finding where we left off…</div> : !trip ? <section className="welcome-trip"><p className="eyebrow">A NEW CHAPTER, YOUR WAY</p><h1>Good trips start<br />with a little curiosity.</h1><p>Somewhere new. A slower morning. A story worth bringing home. Let’s make a plan that feels like you.</p><div className="welcome-landscape" aria-hidden="true"><span className="landscape-sun" /><span className="landscape-hill hill-one" /><span className="landscape-hill hill-two" /><span className="landscape-road" /></div><button className="primary" onClick={() => setNewTrip(true)}>Where shall we go?<Icon name="arrow" /></button><span className="welcome-note">Your itinerary takes shape as we talk.</span></section> : <>
+          <section className="trip-cover"><div className="cover-content"><p className="eyebrow">YOUR NEXT CHAPTER</p><h1>{trip.title}</h1><p className="trip-location"><Icon name="map" />{trip.destination}</p><div className="trip-meta"><span>{dateLabel(trip.startDate)} – {dateLabel(trip.days.at(-1)!.date)}</span><span>{trip.durationDays} days</span><span className="pace-pill">{trip.pace} pace</span></div><div className="interest-tags">{trip.interests.map((interest) => <span key={interest}>{interest}</span>)}</div></div><div className="cover-art" aria-hidden="true"><span className="cover-sun" /><span className="cover-mountain" /><span className="cover-mountain second" /><span className="cover-route" /><span className="route-pin" /></div></section>
+          <div className="itinerary-toolbar"><div><h2>Your itinerary</h2><p>A plan to follow. Space to wander.</p></div><div className="toolbar-actions"><button onClick={() => setDetailsOpen(true)}>Trip details</button><button onClick={exportTrip}>Export</button><button className="generate-button" disabled={disabled || voice.state === "connecting"} onClick={() => { void voice.send(prompt); }}><Icon name="spark" />{trip.days.some((item) => item.activities.length) ? "Reimagine with Sarjy" : "Build with Sarjy"}</button></div></div>
+          <div className="day-tabs" role="tablist" aria-label="Trip days">{trip.days.map((item, index) => <button role="tab" aria-selected={day?.id === item.id} aria-controls="day-panel" id={`tab-${item.id}`} key={item.id} onClick={() => setDayIndex(index)} className={day?.id === item.id ? "current" : ""}><strong>Day {index + 1}</strong><span>{dateLabel(item.date, { weekday: "short", month: "short", day: "numeric" })}</span><small>{item.activities.length} stops</small></button>)}</div>
+          {day && <section id="day-panel" role="tabpanel" aria-labelledby={`tab-${day.id}`} className="day-panel"><div className="day-heading"><div><p className="eyebrow">{dateLabel(day.date, { weekday: "long" }).toUpperCase()}</p><h3>{day.title}</h3></div><span className="day-weather"><Icon name="sun" />{weatherBusy ? "Checking forecast…" : currentWeather ? `${Math.round(currentWeather.high)}° · ${currentWeather.condition}` : "Forecast not available"}</span></div>
+            <div className="activity-timeline">{!day.activities.length && <div className="empty-day"><Icon name="map" /><h4>A day full of possibility.</h4><p>Add your first stop, or talk to Sarjy to build this day around what you love.</p></div>}{[...day.activities].sort((a,b) => a.time.localeCompare(b.time)).map((activity, index) => <article className={`activity-card kind-${activity.kind}`} key={activity.id}><div className="timeline-rail"><span>{activity.time}</span><i>{index + 1}</i></div><div className="activity-main"><div className="activity-category"><span>{activity.kind}</span><span>{activity.durationMinutes} min{activity.locked ? " · Fixed stop" : ""}</span></div><h4>{activity.title}</h4>{activity.notes && <p>{activity.notes}</p>}<div className="activity-actions"><button disabled={disabled} onClick={() => void saveAction("update_activity", { activityId: activity.id, locked: !activity.locked })}>{activity.locked ? "Unlock" : "Keep fixed"}</button><button disabled={disabled || activity.locked} onClick={() => setEditing({ day: dayIndex + 1, activity })}>Edit</button><select aria-label={`Move ${activity.title} to day`} disabled={disabled || activity.locked} value={dayIndex + 1} onChange={(event) => void saveAction("move_activity", { activityId: activity.id, toDay: Number(event.target.value) })}>{trip.days.map((_, index) => <option key={index} value={index + 1}>Day {index + 1}</option>)}</select><button disabled={disabled || activity.locked} onClick={() => void saveAction("remove_activity", { activityId: activity.id })}>Remove</button></div></div></article>)}</div>
+            <button className="add-stop" disabled={disabled} onClick={() => setEditing({ day: dayIndex + 1, activity: null })}><Icon name="plus" />Add a little discovery</button>
+          </section>}
+          <section className="experience-card"><div className="experience-icon"><Icon name="spark" /></div><div><p className="eyebrow">HOW YOUR TRIP MIGHT FEEL</p><h3>{weatherBusy ? "Reading the rhythm of your trip…" : experience?.title || "A little room for the unexpected"}</h3><p>{!weatherBusy && experience?.body || "The saved itinerary and destination forecast shape this reflection. Ask Sarjy to talk you through it."}</p>{!weatherBusy && experience && <span className="experience-basis">{experience.basis}</span>}</div></section>
+          <section className="forecast-panel"><div><h3><Icon name="sun" />A little look at the skies</h3><button disabled={weatherBusy} onClick={() => setWeatherRefresh((value) => value + 1)}>{weatherBusy ? "Checking…" : "Refresh weather"}</button></div><p>{weather?.message || "Weather will appear here when we locate your destination."}</p>{weather && <span className="forecast-location">{weather.location}</span>}<div className="forecast-days">{weather?.days.map((item) => <div key={item.date}><span>{dateLabel(item.date, { weekday: "short", day: "numeric" })}</span><Icon name="sun" /><strong>{Math.round(item.high)}° <small>{Math.round(item.low)}°</small></strong><span>{item.condition}</span>{item.rainChance !== null && <small>{item.rainChance}% chance of rain</small>}</div>)}</div>{weather && <a href={weather.source} target="_blank" rel="noreferrer">Weather by Open-Meteo · checked {new Date(weather.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</a>}</section>
+          <p className="itinerary-disclaimer">A personal plan, not a reservation. Venue hours, prices, and travel times haven’t been verified.</p>
+        </>}
       </main>
+      <aside id="sarjy-partner" className="sarjy-companion" aria-label="Talk to your trip partner"><div className="companion-title"><p className="eyebrow">YOUR TRIP PARTNER</p><span className={`status-dot ${voice.connected ? "active" : ""}`} /></div><VoiceParticipant subtitle="Your trip partner" speaker="assistant" level={voice.assistantLevel} speaking={voice.speaking.assistant} connected={voice.connected} microphone={voice.mic} thinking={voice.state === "thinking" || voice.state === "connecting" || !!voice.tool} /><div className="companion-caption" aria-live="polite">{voice.tool ? <span className="tool-label">{voice.tool === "get_trip_context" ? "Reading your plan & the skies…" : voice.tool === "remember_fact" ? "Remembering your travel style…" : "Updating your itinerary…"}</span> : latestReply || (trip ? "Let’s make this trip feel like you. Tell me what you’d love to do." : "Where have you been dreaming of going?")}</div>
+        <div className="partner-controls">{voice.connected || voice.state === "connecting" ? <><button className={`partner-mic ${voice.mic ? "live" : ""}`} aria-label={voice.mic ? "Mute microphone" : "Enable microphone"} disabled={!voice.connected || voice.micBusy} onClick={() => void voice.toggleMic()}><Icon name="mic" /></button><button className="partner-end" onClick={voice.end}><Icon name="stop" />End conversation</button></> : <button className="primary" disabled={loading} onClick={() => void voice.start(true)}><Icon name="mic" />Let’s talk</button>}</div><p className="mic-note">{voice.state === "connecting" ? "Getting ready…" : voice.micBusy ? "Opening your microphone…" : voice.mic ? (voice.speaking.user ? "You’re speaking · I’m listening" : "Mic on · speak naturally") : "Voice or typing. Whatever feels right."}</p>
+        {(voice.error) && <p className="partner-error" role="alert">{voice.error}</p>}
+        <form className="partner-input" onSubmit={async (event) => { event.preventDefault(); if (await voice.send(message)) setMessage(""); }}><input aria-label="Message Sarjy" placeholder="Tell Sarjy what’s on your mind…" value={message} onChange={(event) => setMessage(event.target.value)} disabled={loading || voice.state === "connecting" || voice.micBusy} /><button aria-label="Send message" disabled={!message.trim() || loading || voice.state === "connecting" || !!voice.tool}>↑</button></form>
+        <div className="partner-suggestions">{(trip ? [`Make day ${dayIndex + 1} more relaxed`, "How will this trip feel?"] : ["Help me plan a trip", "Remember my travel style"]).map((text) => <button key={text} onClick={() => setMessage(text)}>{text}<span>↗</span></button>)}</div><details className="partner-transcript"><summary>Our conversation<span>{voice.transcript.length}</span></summary><div role="log" aria-label="Conversation transcript">{voice.transcript.map((item, index) => <div key={index} className={item.role}><strong>{item.role === "user" ? "You" : "Sarjy"}</strong><p>{item.text}</p></div>)}{!voice.transcript.length && <p>Our conversation will appear here.</p>}</div></details><div className="partner-footer">Small details. Better journeys.<small>Microphone audio goes to Google while enabled.</small></div>
+      </aside>
     </div>
-  );
+    {detailsOpen && trip && <PlannerDialog labelId="trip-details-title" onClose={() => setDetailsOpen(false)}><button className="modal-close" aria-label="Close trip details" onClick={() => setDetailsOpen(false)}>×</button><p className="eyebrow">THE SHAPE OF YOUR JOURNEY</p><h2 id="trip-details-title">Your trip, your way</h2><p>Update the details. Your saved stops stay in place; changing the first day shifts their dates.</p><form onSubmit={async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); if (await saveAction("update_trip", { title: data.get("title"), destination: data.get("destination"), startDate: data.get("startDate"), pace: data.get("pace") })) setDetailsOpen(false); }}><label>Trip name<input name="title" defaultValue={trip.title} required maxLength={120} autoFocus /></label><label>Destination<input name="destination" defaultValue={trip.destination} required maxLength={120} /></label><label>First day<input type="date" name="startDate" defaultValue={trip.startDate} required /></label><label>Your rhythm<select name="pace" defaultValue={trip.pace}><option value="relaxed">Relaxed</option><option value="balanced">Balanced</option><option value="full">Full</option></select></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={saving}>{saving ? "Saving…" : "Save trip details"}<Icon name="check" /></button></form></PlannerDialog>}
+    {newTrip && <PlannerDialog labelId="new-trip-title" onClose={() => setNewTrip(false)}><button className="modal-close" aria-label="Close new trip" onClick={() => setNewTrip(false)}>×</button><p className="eyebrow">LET THE ANTICIPATION BEGIN</p><h2 id="new-trip-title">Where shall we go?</h2><p>A few details. A whole new story.</p><form onSubmit={async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); if (await saveAction("create_trip", { destination: data.get("destination"), startDate: data.get("startDate"), durationDays: Number(data.get("durationDays")), interests: String(data.get("interests")).split(",").map((text) => text.trim()).filter(Boolean), pace: data.get("pace") })) { setNewTrip(false); setDayIndex(0); setWeather(null); setExperience(null); } }}><label>Destination<input name="destination" placeholder="Kyoto, Japan" required maxLength={120} autoFocus /></label><div className="form-row"><label>First day<input type="date" name="startDate" defaultValue={defaultDate} required /></label><label>Days away<input type="number" min="1" max="14" name="durationDays" defaultValue="3" required /></label></div><label>What do you love?<input name="interests" placeholder="Food, quiet streets, art…" /></label><label>Your rhythm<select name="pace" defaultValue="balanced"><option value="relaxed">Relaxed · room to wander</option><option value="balanced">Balanced · a little of everything</option><option value="full">Full · make every day count</option></select></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={saving}>{saving ? "Saving your trip…" : "Start my itinerary"}<Icon name="arrow" /></button></form></PlannerDialog>}
+    {editing && trip && <PlannerDialog labelId="activity-title" onClose={() => setEditing(null)}><button className="modal-close" aria-label="Close activity editor" onClick={() => setEditing(null)}>×</button><p className="eyebrow">DAY {editing.day} · {trip.destination}</p><h2 id="activity-title">{editing.activity ? "A little adjustment" : "A little discovery"}</h2><form onSubmit={async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const args = { title: data.get("title"), time: data.get("time"), durationMinutes: Number(data.get("durationMinutes")), kind: data.get("kind"), notes: data.get("notes"), ...(editing.activity ? { activityId: editing.activity.id } : { day: editing.day }) }; if (await saveAction(editing.activity ? "update_activity" : "add_activity", args)) setEditing(null); }}><label>Activity<input name="title" defaultValue={editing.activity?.title} placeholder="Morning at a neighborhood market" required maxLength={200} autoFocus /></label><div className="form-row"><label>Time<input type="time" name="time" defaultValue={editing.activity?.time || "09:00"} required /></label><label>Duration (minutes)<input type="number" name="durationMinutes" min="15" max="720" defaultValue={editing.activity?.durationMinutes || 60} required /></label></div><label>Kind of moment<select name="kind" defaultValue={editing.activity?.kind || "outdoors"}><option value="outdoors">Outdoors</option><option value="indoors">Indoors</option><option value="food">Food & drink</option><option value="travel">Getting there</option></select></label><label>A note to yourself<textarea name="notes" defaultValue={editing.activity?.notes || ""} maxLength={1000} rows={3} /></label>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={saving}>{saving ? "Saving…" : "Save this moment"}<Icon name="check" /></button></form></PlannerDialog>}
+    {memoryOpen && <PlannerDialog labelId="memory-title" onClose={() => setMemoryOpen(false)} className="memories-modal"><button className="modal-close" aria-label="Close travel style" onClick={() => setMemoryOpen(false)}>×</button><p className="eyebrow">THE LITTLE THINGS THAT MAKE IT YOU</p><h2 id="memory-title">Your travel style</h2><p>Sarjy remembers what you choose to share. These preferences stay with this browser across sessions.</p><div className="saved-memories">{workspace.memories.map((memory) => <div key={memory.key}><span><strong>{memory.key.replaceAll("_", " ")}</strong><p>{memory.value}</p></span><button disabled={disabled} onClick={() => void saveAction("forget_fact", { key: memory.key })} aria-label={`Forget ${memory.key}`}>×</button></div>)}{!workspace.memories.length && <p>No preferences yet. Tell Sarjy what you love, or add one below.</p>}</div><form onSubmit={async (event) => { event.preventDefault(); const form = event.currentTarget, data = new FormData(form); if (await saveAction("remember_fact", { key: data.get("key"), value: data.get("value") })) form.reset(); }}><label>A preference<input name="key" placeholder="Favorite color, travel pace, food…" required maxLength={60} /></label><label>What should I remember?<input name="value" placeholder="I love unhurried mornings" required maxLength={300} /></label><button className="primary" disabled={disabled}>Remember this<Icon name="spark" /></button></form><p className="memory-footnote">A different browser starts fresh. Clearing this browser’s cookies loses access to these saved plans.</p></PlannerDialog>}
+    <div className="mobile-partner-bar"><button onClick={() => document.getElementById("sarjy-partner")?.scrollIntoView({ behavior: "smooth", block: "start" })}><Icon name="spark" /><span>Talk to Sarjy<small>{voice.speaking.assistant ? "Your trip partner is speaking" : "A little help, whenever you need it"}</small></span><Icon name="arrow" /></button><button aria-label={voice.connected ? (voice.mic ? "Mute microphone" : "Enable microphone") : "Start voice conversation"} disabled={loading || voice.state === "connecting" || voice.micBusy} onClick={() => { if (voice.connected) void voice.toggleMic(); else { document.getElementById("sarjy-partner")?.scrollIntoView({ behavior: "smooth", block: "start" }); void voice.start(true); } }}><Icon name="mic" /></button></div>
+  </div></MotionConfig>;
 }
