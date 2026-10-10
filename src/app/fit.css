@@ -188,26 +188,7 @@ select:focus-visible {
   color: #8b9484;
   line-height: 1.7;
 }
-.date-picker {
-  flex-shrink: 0;
-  border: 1px solid var(--fit-line);
-  border-radius: 12px;
-  background: white;
-  padding: 9px 11px;
-  display: grid;
-  gap: 4px;
-}
-.date-picker > span {
-  font-size: 9px;
-  color: #8a9580;
-}
-.date-picker input {
-  border: 0;
-  font-size: 10px;
-  max-width: 125px;
-  background: none;
-  color: #58684e;
-}
+
 .action-status {
   display: flex;
   gap: 8px;
@@ -1427,14 +1408,7 @@ select:focus-visible {
   .page-heading {
     flex-direction: column;
   }
-  .date-picker {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .date-picker > span {
-    font-size: 9px;
-  }
+
   .food-table-head,
   .food-row {
     grid-template-columns: minmax(0, 1fr) 58px 45px;
@@ -1644,14 +1618,21 @@ select:focus-visible {
 }
 @media (max-width: 580px) {
   .nutrition-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .energy-card {
+    padding: 18px;
   }
   .macro-card {
     padding: 23px;
   }
   .energy-body {
     justify-content: center;
-    gap: 28px;
+    gap: 14px;
+  }
+  .calorie-ring {
+    width: 112px;
+    height: 112px;
   }
   .energy-title h2 {
     font-size: 16px;
@@ -1726,9 +1707,7 @@ select:focus-visible {
     max-width: 100px;
     line-height: 1.8;
   }
-  .date-picker {
-    padding: 8px 10px;
-  }
+
   .diary-empty {
     padding: 30px 14px;
   }
