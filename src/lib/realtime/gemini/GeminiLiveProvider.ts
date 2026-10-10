@@ -1,4 +1,9 @@
-import { GoogleGenAI, type LiveServerMessage, type Session } from "@google/genai";
+import {
+  FunctionResponseScheduling,
+  GoogleGenAI,
+  type LiveServerMessage,
+  type Session,
+} from "@google/genai";
 import { arrayBufferToBase64, float32ToPCM16 } from "../audio";
 import { conversationContext, type Workspace } from "../../../features/food-logging/model";
 import { SpeechActivityDetector } from "../speech-activity";
@@ -265,7 +270,17 @@ export class GeminiLiveProvider implements RealtimeProvider {
       if (generation === this.generation) this.emit({ type: "tool_state", busy: false, name });
     }
     if (generation === this.generation && !this.cancelledCalls.has(id))
-      session.sendToolResponse({ functionResponses: [{ id, name, response: result }] });
+      session.sendToolResponse({
+        functionResponses: [
+          {
+            id,
+            name,
+            response: result,
+            // Let the acknowledgment finish, then resume with the real result.
+            scheduling: FunctionResponseScheduling.WHEN_IDLE,
+          },
+        ],
+      });
   }
 
   sendText(text: string) {

@@ -14,7 +14,9 @@ function compile(path, imports = {}) {
   return dataModule(outputText);
 }
 const providerModule = compile("../src/lib/realtime/gemini/GeminiLiveProvider.ts", {
-  "@google/genai": dataModule("export class GoogleGenAI {}"),
+  "@google/genai": dataModule(
+    'export class GoogleGenAI {} export const FunctionResponseScheduling = { WHEN_IDLE: "WHEN_IDLE" };',
+  ),
   "../../../features/food-logging/model": dataModule(
     "export const conversationContext = (w) => w;",
   ),
@@ -166,4 +168,65 @@ test("an older UI snapshot cannot move the voice workspace version backwards", (
   provider.syncWorkspace({ version: 2 });
   assert.equal(provider.workspaceVersion, 3);
   assert.equal(updates.length, 1);
+});
+
+test("acknowledgment audio plays during a slow tool and the result does not interrupt it", async (t) => {
+  const { provider, events, chunks, audio } = setup();
+  const responses = [];
+  provider.session.sendToolResponse = (response) => responses.push(response);
+  let finish;
+  t.mock.method(globalThis, "fetch", () => new Promise((resolve) => (finish = resolve)));
+  provider.handleMessage({
+    toolCall: { functionCalls: [{ id: "lookup", name: "search_food", args: {} }] },
+  });
+  await Promise.resolve();
+  audio();
+  provider.handleMessage({
+    serverContent: { outputTranscription: { text: "Got it, I'm finding the nutrition." } },
+  });
+  assert.equal(responses.length, 0);
+  assert.equal(provider.currentState, "speaking");
+  assert.equal(
+    events.some((event) => event.type === "tool_state" && event.busy),
+    true,
+  );
+  finish({ ok: true, json: async () => ({ status: "draft", saved: false }) });
+  await provider.toolQueue;
+  assert.equal(responses[0].functionResponses[0].scheduling, "WHEN_IDLE");
+  assert.equal(responses[0].functionResponses[0].response.saved, false);
+  assert.equal(chunks[0].stopped, undefined);
+  assert.equal(provider.currentState, "speaking");
+});
+
+test("asynchronous tools still execute in order and report failures without success", async (t) => {
+  const provider = new GeminiLiveProvider(),
+    requests = [],
+    responses = [];
+  provider.session = { sendToolResponse: (response) => responses.push(response) };
+  let finish;
+  t.mock.method(globalThis, "fetch", async (_, options) => {
+    const command = JSON.parse(options.body);
+    requests.push(command);
+    if (requests.length === 1) return new Promise((resolve) => (finish = resolve));
+    return { ok: false, status: 502, json: async () => ({ error: "USDA unavailable" }) };
+  });
+  provider.handleMessage({
+    toolCall: {
+      functionCalls: [
+        { id: "draft", name: "start_food_log", args: {} },
+        { id: "lookup", name: "search_food", args: {} },
+      ],
+    },
+  });
+  await Promise.resolve();
+  assert.equal(requests.length, 1);
+  finish({ ok: true, json: async () => ({ workspace: { version: 1 }, saved: false }) });
+  await provider.toolQueue;
+  assert.deepEqual(
+    requests.map((request) => request.expectedVersion),
+    [0, 1],
+  );
+  assert.equal(responses[1].functionResponses[0].response.saved, false);
+  assert.equal(responses[1].functionResponses[0].response.error, "USDA unavailable");
+  assert.equal(responses[1].functionResponses[0].scheduling, "WHEN_IDLE");
 });
