@@ -18,7 +18,7 @@ export type Entry = {
   nutrients: Nutrients;
 };
 export type Meal = { id: string; name: string; date: string; entries: Entry[]; createdAt: string };
-export type SavedMeal = { id: string; name: string; entries: Entry[] };
+type SavedMeal = { id: string; name: string; entries: Entry[] };
 export type Candidate = { fdcId: number; name: string; dataType: string };
 export type PendingItem = {
   id: string;
@@ -47,7 +47,7 @@ type Data = {
   focusMealId: string | null;
   focusEntryId: string | null;
 };
-export type Operation = { id: string; name: string; at: string; before: Data; undone: boolean };
+type Operation = { id: string; name: string; at: string; before: Data; undone: boolean };
 export type Workspace = Data & {
   version: number;
   pending: Pending | null;
@@ -105,7 +105,6 @@ export function context(w: Workspace, date = localDate(w.timezone)) {
     undoableOperation: [...w.operations].reverse().find((o) => !o.undone)?.id ?? null,
   };
 }
-export const conversationContext = context;
 function data(w: Workspace): Data {
   const {
     goals,
@@ -149,6 +148,16 @@ function findEntry(w: Workspace, id: unknown) {
     if (e) return { meal: m, entry: e };
   }
   throw new NutritionError("Food entry not found. Clarify which food to change.", 404);
+}
+function validatePendingItem(item: PendingItem) {
+  try {
+    if (!item.food) throw new NutritionError("Choose a matching food first");
+    if (!item.quantity) throw new NutritionError("How much did you eat?");
+    calculate(item.food, item.quantity);
+    item.issue = undefined;
+  } catch (error) {
+    item.issue = (error as Error).message;
+  }
 }
 export function applyAction(original: Workspace, action: Action): Workspace {
   const w = structuredClone(original),
@@ -203,13 +212,7 @@ export function applyAction(original: Workspace, action: Action): Workspace {
         throw new NutritionError("Choose a food returned for this draft");
       item.food = structuredClone(food);
       if (a.quantity) item.quantity = quantity(a.quantity);
-      try {
-        if (!item.quantity) throw new NutritionError("How much did you eat?");
-        calculate(food, item.quantity);
-        item.issue = undefined;
-      } catch (error) {
-        item.issue = (error as Error).message;
-      }
+      validatePendingItem(item);
       tracked = false;
       break;
     }
@@ -217,13 +220,7 @@ export function applyAction(original: Workspace, action: Action): Workspace {
       const item = w.pending?.items.find((i) => i.id === a.itemId);
       if (!item) throw new NutritionError("Draft item no longer exists", 409);
       item.quantity = quantity(a.quantity);
-      try {
-        if (!item.food) throw new NutritionError("Choose a matching food first");
-        calculate(item.food, item.quantity);
-        item.issue = undefined;
-      } catch (error) {
-        item.issue = (error as Error).message;
-      }
+      validatePendingItem(item);
       tracked = false;
       break;
     }
@@ -341,13 +338,7 @@ export function applyAction(original: Workspace, action: Action): Workspace {
       if (!item || !food) throw new NutritionError("Draft item or saved food not found", 404);
       item.food = structuredClone(food);
       if (a.quantity) item.quantity = quantity(a.quantity);
-      try {
-        if (!item.quantity) throw new NutritionError("How much did you eat?");
-        calculate(food, item.quantity);
-        item.issue = undefined;
-      } catch (error) {
-        item.issue = (error as Error).message;
-      }
+      validatePendingItem(item);
       tracked = false;
       break;
     }

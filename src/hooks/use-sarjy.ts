@@ -110,6 +110,7 @@ export function useSarjy(onWorkspace: (event: Extract<VoiceEvent, { type: "works
     caption,
     captionStatus,
     error,
+    clearError: () => setError(""),
     mic,
     micBusy,
     tool,

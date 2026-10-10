@@ -1,0 +1,299 @@
+.app {
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+.content {
+  max-width: 1800px;
+}
+.main {
+  padding: 32px 36px 36px;
+}
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 34px;
+  align-items: stretch;
+}
+.companionSlot {
+  min-width: 0;
+}
+.overview {
+  min-width: 0;
+  padding: 4px 0;
+}
+.overview :global(.page-heading) {
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 22px;
+}
+.overview :global(.page-heading h1) {
+  font-size: clamp(24px, 2.3vw, 32px);
+  margin: 8px 0;
+}
+.overview :global(.page-heading > div > p:last-child) {
+  font-size: 12px;
+}
+.overview :global(.nutrition-summary) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.overview :global(.energy-card) {
+  padding: 22px 24px;
+}
+.overview :global(.energy-body) {
+  justify-content: start;
+  gap: 28px;
+  margin: 22px 0 0;
+}
+.overview :global(.calorie-ring) {
+  width: 144px;
+  height: 144px;
+}
+.overview :global(.energy-details) {
+  margin-left: 0;
+}
+.overview :global(.calorie-ring strong) {
+  font-size: 32px;
+}
+.overview :global(.energy-details > strong) {
+  font-size: 30px;
+}
+.overview :global(.energy-title h2) {
+  font-size: 18px;
+}
+.overview :global(.energy-title .text-button) {
+  font-size: 11px;
+}
+.overview :global(.goal-note) {
+  font-size: 10px;
+  max-width: 180px;
+}
+.overview :global(.macro-card) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 22px;
+  padding: 20px 24px;
+}
+.overview :global(.macro-card > .fit-eyebrow),
+.overview :global(.macro-card > small) {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.overview :global(.macro) {
+  margin: 3px 0;
+}
+.overview :global(.macro > div:first-child) {
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+}
+.overview :global(.macro p) {
+  font-size: 13px;
+}
+.overview :global(.macro p > span) {
+  font-size: 11px;
+}
+.overview :global(.macro-track) {
+  height: 5px;
+}
+.overview :global(.macro-card > small) {
+  font-size: 9px;
+  margin-top: 8px;
+}
+.records {
+  margin-top: 36px;
+}
+.records :global(.food-diary) {
+  margin-top: 0;
+  scroll-margin-top: 20px;
+}
+.recent {
+  margin: 22px 4px 0;
+  color: #77886b;
+}
+.recent > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.recent a {
+  font-size: 11px;
+  text-decoration: none;
+}
+.recent > p {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.recent ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.recent li {
+  border: 1px solid #e4e9dd;
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.recent li > span {
+  text-transform: capitalize;
+}
+.recent li small {
+  color: #9aa68d;
+  font-size: 10px;
+}
+.secondaryView {
+  display: block;
+}
+.secondaryView .companionSlot {
+  display: none;
+}
+.secondaryView .companionSlot[data-expanded="true"] {
+  display: block;
+}
+.secondaryView .records {
+  margin-top: 0;
+}
+.headerTalk {
+  padding: 10px 15px;
+  border-radius: 25px;
+  background: #eaf1df;
+  color: #567749;
+  font-size: 11px;
+}
+.reviewDraft {
+  background: none;
+  color: #6c835d;
+  font-size: 12px;
+  padding: 14px 10px 0;
+}
+@media (max-width: 1200px) {
+  .main {
+    padding: 26px 24px;
+  }
+  .hero {
+    gap: 24px;
+  }
+  .overview :global(.page-heading) {
+    flex-direction: column;
+  }
+  .overview :global(.energy-body) {
+    gap: 18px;
+  }
+  .overview :global(.calorie-ring) {
+    width: 125px;
+    height: 125px;
+  }
+  .overview :global(.energy-details > strong) {
+    font-size: 27px;
+  }
+  .overview :global(.macro-card) {
+    padding: 20px;
+    gap: 12px;
+  }
+}
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 20px;
+  }
+  .overview :global(.energy-card) {
+    padding: 20px;
+  }
+  .overview :global(.energy-body) {
+    gap: 14px;
+  }
+  .overview :global(.calorie-ring) {
+    width: 105px;
+    height: 105px;
+  }
+  .overview :global(.calorie-ring strong) {
+    font-size: 25px;
+  }
+  .overview :global(.energy-details > strong) {
+    font-size: 23px;
+  }
+}
+@media (max-width: 760px) {
+  .app :global(.fit-rail) {
+    width: 48px;
+    padding: 22px 5px;
+  }
+  .content {
+    width: calc(100% - 48px);
+  }
+  .app :global(.fit-header) {
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .app :global(.private-badge) {
+    font-size: 7px;
+    padding: 7px;
+  }
+  .app :global(.fit-wordmark) {
+    font-size: 25px;
+  }
+  .main {
+    padding: 20px 14px 24px;
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .overview :global(.page-heading) {
+    flex-direction: row;
+    align-items: center;
+  }
+  .overview :global(.page-heading h1) {
+    font-size: 27px;
+  }
+  .overview :global(.energy-body) {
+    gap: 18px;
+  }
+  .overview :global(.calorie-ring) {
+    width: 115px;
+    height: 115px;
+  }
+  .overview :global(.energy-details > strong) {
+    font-size: 26px;
+  }
+  .records {
+    margin-top: 28px;
+  }
+  .recent ul {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .recent li {
+    justify-content: space-between;
+  }
+  .headerTalk {
+    font-size: 10px;
+    padding: 8px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .overview,
+  .records,
+  .app :global(.fit-header),
+  .app :global(.fit-bottom) {
+    transition: opacity 220ms;
+  }
+  .overview[inert],
+  .records[inert],
+  .app :global(.fit-header[inert]),
+  .app :global(.fit-bottom[inert]) {
+    opacity: 0.1;
+  }
+}

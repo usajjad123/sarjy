@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
-const moduleURL = (code) => `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
-function compile(path, imports = {}) {
-  let { outputText } = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  for (const [key, value] of Object.entries(imports))
-    outputText = outputText.replaceAll(`from "${key}"`, `from "${value}"`);
-  return moduleURL(outputText);
-}
+import { compile } from "./helpers/typescript.mjs";
+
 const engineURL = compile("../src/features/nutrition/engine.ts");
 const { calculate, gramsFor, localDate, quantity, sum } = await import(engineURL);
 const modelURL = compile("../src/features/food-logging/model.ts", {

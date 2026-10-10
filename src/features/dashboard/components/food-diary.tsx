@@ -22,7 +22,7 @@ export function FoodDiary({
   onSave: (meal: Meal) => void;
 }) {
   return (
-    <section className="food-diary">
+    <section className="food-diary" id="food-diary">
       <div className="section-heading">
         <div>
           <p className="fit-eyebrow">YOUR FOOD DIARY</p>

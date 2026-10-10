@@ -5,7 +5,7 @@ import { serverSupabase, supabaseConfigured } from "@/lib/supabase/server";
 import { applyAction, emptyWorkspace, type Action, type Workspace } from "./model";
 import { NutritionError } from "../nutrition/engine";
 import * as local from "./local-store";
-export type Owner = { id: string; client?: SupabaseClient; legacyId?: string };
+type Owner = { id: string; client?: SupabaseClient; legacyId?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // During migration, concurrent requests bearing the same old browser identity
 // must receive the same new session. Keep this bounded and short-lived; never
@@ -43,8 +43,7 @@ async function anonymousSession(client: SupabaseClient, legacyId?: string) {
   }
   return session;
 }
-export const storageKind = () =>
-  supabaseConfigured() ? "supabase" : process.env.DATABASE_URL ? "postgresql" : "local";
+export const storageKind = () => (supabaseConfigured() ? "supabase" : "local");
 function storageError(error: { message?: string }) {
   const message = error.message ?? "";
   if (message.includes("SARJY_CONFLICT"))

@@ -1,4 +1,4 @@
-import { PlannerDialog } from "@/components/planner-dialog";
+import { Modal } from "@/components/modal";
 import type { FoodAction } from "../types";
 import type { Entry } from "@/features/food-logging/model";
 import { QuantityForm } from "./quantity-form";
@@ -16,8 +16,8 @@ export function EditPortionDialog({
   onClose: () => void;
 }) {
   return (
-    <PlannerDialog labelId="edit-title" onClose={() => onClose()}>
-      <button className="dialog-close" aria-label="Close" onClick={() => onClose()}>
+    <Modal labelId="edit-title" onClose={onClose}>
+      <button className="dialog-close" aria-label="Close" onClick={onClose}>
         ×
       </button>
       <p className="fit-eyebrow">CORRECT THE RECORD</p>
@@ -37,6 +37,6 @@ export function EditPortionDialog({
           {error}
         </p>
       )}
-    </PlannerDialog>
+    </Modal>
   );
 }

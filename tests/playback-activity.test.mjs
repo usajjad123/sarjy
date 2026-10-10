@@ -1,28 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
 
-const dataModule = (code) => `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
-function compile(path, imports = {}) {
-  const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  let { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  for (const [name, url] of Object.entries(imports))
-    outputText = outputText.replaceAll(`from "${name}"`, `from "${url}"`);
-  return dataModule(outputText);
-}
+import { compile, moduleURL as dataModule } from "./helpers/typescript.mjs";
+
 const providerModule = compile("../src/lib/realtime/gemini/GeminiLiveProvider.ts", {
   "@google/genai": dataModule(
     'export class GoogleGenAI {} export const FunctionResponseScheduling = { WHEN_IDLE: "WHEN_IDLE" };',
   ),
-  "../../../features/food-logging/model": dataModule(
-    "export const conversationContext = (w) => w;",
-  ),
+  "../../../features/food-logging/model": dataModule("export const context = (w) => w;"),
   "../audio": compile("../src/lib/realtime/audio.ts"),
   "../speech-activity": compile("../src/lib/realtime/speech-activity.ts"),
-  "../captions": compile("../src/lib/realtime/captions.ts"),
   "./LiveInputTranscriber": dataModule(
     "export class LiveInputTranscriber { disconnect() {} resetUtterance() {} }",
   ),
@@ -128,18 +115,27 @@ test("interim user captions display before final transcription without changing 
   assert.equal(events.filter((e) => e.type === "user_transcript").length, 0);
   const captions = events.filter((e) => e.type === "caption");
   assert.equal(captions.at(-1).caption.text, "I ate an apple");
-  assert.equal(captions.at(-1).caption.activeWord, 3);
+  assert.equal(captions.at(-1).caption.interim, true);
   provider.handleMessage({ serverContent: { inputTranscription: { text: "I ate an apple." } } });
   assert.equal(events.filter((e) => e.type === "user_transcript").length, 1);
 });
 
-test("interrupting playback clears the assistant word highlight", () => {
+test("assistant captions accumulate real transcription chunks and reset after an interruption", () => {
   const { provider, events, audio } = setup();
+  const latest = () => events.filter((e) => e.type === "caption").at(-1).caption;
   audio();
-  provider.handleMessage({ serverContent: { outputTranscription: { text: "Hello there" } } });
-  assert.equal(events.filter((e) => e.type === "caption").at(-1).caption.activeWord, 0);
+  provider.handleMessage({ serverContent: { outputTranscription: { text: "Hello" } } });
+  provider.handleMessage({ serverContent: { outputTranscription: { text: " there" } } });
+  assert.deepEqual(latest(), { speaker: "assistant", text: "Hello there", interim: true });
   provider.handleMessage({ serverContent: { interrupted: true } });
-  assert.equal(events.filter((e) => e.type === "caption").at(-1).caption.activeWord, -1);
+  assert.deepEqual(latest(), { speaker: "assistant", text: "Hello there", interim: false });
+  audio();
+  provider.handleMessage({ serverContent: { outputTranscription: { text: "A fresh reply." } } });
+  provider.handleMessage({ serverContent: { turnComplete: true } });
+  assert.deepEqual(latest(), { speaker: "assistant", text: "A fresh reply.", interim: false });
+  audio();
+  provider.handleMessage({ serverContent: { outputTranscription: { text: "Another reply." } } });
+  assert.equal(latest().text, "Another reply.");
 });
 
 test("a late tool response cannot overwrite newer manual changes or return stale context", async (t) => {

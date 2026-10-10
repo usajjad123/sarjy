@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { PlannerDialog } from "@/components/planner-dialog";
+import { Modal } from "@/components/modal";
 import { Icon } from "./icon";
-export type FormDialogProps = {
+type FormDialogProps = {
   title: string;
   description: string;
   children: ReactNode;
@@ -22,7 +22,7 @@ export function FormDialog({
   onSubmit,
 }: FormDialogProps) {
   return (
-    <PlannerDialog labelId="form-title" onClose={onClose}>
+    <Modal labelId="form-title" onClose={onClose}>
       <button className="dialog-close" aria-label="Close" onClick={onClose}>
         ×
       </button>
@@ -46,7 +46,7 @@ export function FormDialog({
           <Icon name="arrow" />
         </button>
       </form>
-    </PlannerDialog>
+    </Modal>
   );
 }
 export type ActionDialogProps = {

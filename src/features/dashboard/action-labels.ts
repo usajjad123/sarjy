@@ -12,3 +12,12 @@ export const actionLabels: Record<string, string> = {
   get_nutrition_context: "Reading your nutrition records",
   remember_fact: "Remembering your preference",
 };
+
+export const savedChangeLabels: Record<string, string> = {
+  commit_food_log: "Meal logged",
+  log_saved_meal: "Meal logged",
+  update_quantity: "Portion updated",
+  remove_entry: "Food removed",
+  undo: "Last change undone",
+  save_meal: "Meal saved to your library",
+};

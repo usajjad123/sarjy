@@ -1,0 +1,69 @@
+.avatar {
+  --voice-color: #80a964;
+  text-align: center;
+}
+.stage {
+  position: relative;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  display: grid;
+  place-items: center;
+  margin: 0 auto;
+}
+.halo {
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  background: var(--voice-color);
+  filter: blur(25px);
+}
+.orbit {
+  position: absolute;
+  inset: 12px;
+  border: 1px dashed #c3d2b7;
+  border-radius: 50%;
+}
+.orbit::before {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  background: var(--voice-color);
+  border-radius: 50%;
+  top: 25px;
+  left: 37px;
+}
+.body {
+  position: relative;
+  width: 95%;
+  height: 95%;
+}
+.wave {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 4px 0 10px;
+}
+.bar {
+  width: 3px;
+  height: 5px;
+  display: block;
+  border-radius: 4px;
+  background: var(--voice-color);
+}
+.name {
+  font-size: var(--avatar-name-size);
+  letter-spacing: -1px;
+  font-weight: 500;
+}
+@media (max-width: 760px) {
+  .orbit {
+    inset: 5px;
+  }
+  .halo {
+    inset: 15px;
+    filter: blur(17px);
+  }
+}

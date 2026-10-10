@@ -2,7 +2,6 @@
   --fit-ink: #273e33;
   --fit-muted: #859080;
   --fit-green: #477a48;
-  --fit-lime: #cce6a7;
   --fit-line: #e5e9df;
   --fit-paper: #fbfcf8;
 }
@@ -154,10 +153,6 @@ select:focus-visible {
   align-items: center;
   padding: 10px 13px;
   color: #7c8b71;
-}
-.fit-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 310px;
 }
 .fit-main {
   padding: 38px 35px 35px;
@@ -358,55 +353,6 @@ select:focus-visible {
   display: block;
   margin-top: 25px;
 }
-.voice-invitation {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  background: #edf4e2;
-  border: 1px solid #e2ebd6;
-  border-radius: 19px;
-  padding: 22px;
-  margin: 22px 0 32px;
-}
-.voice-invitation h2 {
-  font-size: 19px;
-  letter-spacing: -0.6px;
-  font-weight: 500;
-  margin: 7px 0;
-}
-.voice-invitation > div > p:last-child {
-  font-size: 10px;
-  color: #8a9b77;
-  line-height: 1.65;
-}
-.invitation-art {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  color: #8db566;
-}
-.invitation-art > span {
-  font-size: 48px;
-  margin-right: 7px;
-  font-weight: 300;
-  line-height: 1;
-}
-.invitation-art > i {
-  width: 3px;
-  background: #b4cf94;
-  border-radius: 4px;
-  height: 10px;
-}
-.invitation-art > i:nth-child(3) {
-  height: 23px;
-}
-.invitation-art > i:nth-child(4) {
-  height: 30px;
-}
-.invitation-art > i:nth-child(5) {
-  height: 17px;
-}
 .primary,
 .secondary {
   display: inline-flex;
@@ -433,14 +379,6 @@ select:focus-visible {
 }
 .secondary:hover {
   background: #f2f6eb;
-}
-.voice-invitation > .primary {
-  margin-left: auto;
-  padding: 13px;
-  font-size: 10px;
-}
-.voice-invitation > .primary svg {
-  width: 15px;
 }
 .section-heading {
   display: flex;
@@ -590,21 +528,6 @@ select:focus-visible {
   color: #849b70;
   white-space: nowrap;
 }
-.fit-companion {
-  border-left: 1px solid var(--fit-line);
-  padding: 31px 25px;
-  background: #f6f8f1;
-  min-width: 0;
-}
-.companion-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.companion-heading .fit-eyebrow {
-  font-size: 8px;
-  letter-spacing: 1.5px;
-}
 .connection-dot {
   width: 5px;
   height: 5px;
@@ -614,219 +537,6 @@ select:focus-visible {
 .connection-dot.online {
   background: #6a9a55;
   box-shadow: 0 0 0 3px #7cac6618;
-}
-.fit-companion .voice-participant {
-  margin: 20px auto 0;
-  text-align: center;
-}
-.fit-companion .avatar-stage {
-  width: 180px;
-  height: 180px;
-  margin: auto;
-}
-.fit-companion .avatar-body {
-  width: 170px;
-  height: 170px;
-}
-.fit-companion .avatar-orbit {
-  inset: 7px;
-}
-.fit-companion .avatar-halo {
-  inset: 12px;
-  filter: blur(25px);
-}
-.fit-companion .voice-wave {
-  height: 15px;
-  margin-bottom: 12px;
-}
-.fit-companion .voice-participant h2 {
-  font-size: 21px;
-  letter-spacing: -0.4px;
-  font-weight: 500;
-}
-.fit-companion .voice-participant h2 > span {
-  font-size: 9px;
-  margin-top: 6px;
-  letter-spacing: 0;
-  color: #a1ad93;
-}
-.fit-companion .participant-status {
-  font-size: 9px;
-  margin-top: 12px;
-}
-.companion-caption {
-  height: 112px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  padding: 15px 0;
-  margin: 12px 0;
-  overflow: auto;
-  font-size: 11px;
-  line-height: 1.9;
-  color: #8c9b7e;
-}
-.companion-caption small {
-  font-size: 8px;
-  display: block;
-  color: #8fa778;
-  margin-bottom: 5px;
-}
-.working-caption {
-  color: #5b794a;
-}
-.fit-voice-controls {
-  display: flex;
-  justify-content: center;
-  gap: 9px;
-}
-.fit-voice-controls .primary {
-  width: 100%;
-  border-radius: 30px;
-  padding: 14px;
-  font-size: 11px;
-}
-.fit-voice-controls svg {
-  width: 15px;
-}
-.fit-voice-controls .secondary {
-  border-radius: 30px;
-  padding: 11px 18px;
-  font-size: 10px;
-}
-.mic-toggle.on {
-  background: #e8f1db;
-}
-.user-activity {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 7px;
-  font-size: 8px;
-  color: #9ba98d;
-  margin-top: 12px;
-}
-.user-activity[data-speaking="true"] {
-  color: #60894b;
-}
-.fit-message-form {
-  display: flex;
-  align-items: center;
-  border: 1px solid #e0e6d8;
-  background: #fff;
-  border-radius: 13px;
-  padding: 6px;
-  margin-top: 24px;
-  gap: 5px;
-}
-.fit-message-form input {
-  padding: 8px;
-  border: 0;
-  outline: none;
-  background: none;
-  font-size: 10px;
-  width: 0;
-  flex: 1;
-  color: #5b704b;
-}
-.fit-message-form input::placeholder {
-  color: #a3b091;
-}
-.fit-message-form button {
-  display: grid;
-  place-items: center;
-  background: #edf3e4;
-  border-radius: 9px;
-  padding: 8px;
-  color: #83a265;
-}
-.fit-message-form svg {
-  width: 15px;
-  height: 15px;
-}
-.conversation-starters {
-  margin-top: 28px;
-}
-.conversation-starters > p {
-  font-size: 8px;
-  color: #a2b18e;
-  letter-spacing: 1.5px;
-  margin-bottom: 12px;
-}
-.conversation-starters > button {
-  background: transparent;
-  border-bottom: 1px solid #e7eddd;
-  display: flex;
-  width: 100%;
-  text-align: left;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 11px 0;
-  font-size: 9px;
-  line-height: 1.6;
-  color: #849574;
-}
-.conversation-starters > button > span {
-  color: #adbb9b;
-}
-.conversation-starters > button:hover {
-  color: #47733a;
-}
-.fit-history {
-  margin-top: 25px;
-  font-size: 9px;
-  color: #8e9e7e;
-}
-.fit-history summary {
-  cursor: pointer;
-}
-.fit-history summary > span {
-  float: right;
-}
-.fit-history > div {
-  max-height: 300px;
-  overflow: auto;
-  margin-top: 12px;
-}
-.fit-history article {
-  background: #edf3e3;
-  border-radius: 10px;
-  padding: 10px;
-  margin: 10px 0;
-  line-height: 1.8;
-}
-.fit-history article.user {
-  background: #faf0e5;
-}
-.fit-history article strong {
-  font-size: 8px;
-}
-.fit-history article p {
-  margin-top: 4px;
-  font-size: 10px;
-}
-.companion-footer {
-  margin-top: 33px;
-  padding-top: 23px;
-  border-top: 1px solid #e4ebda;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #9cac8b;
-}
-.companion-footer svg {
-  width: 23px;
-  flex-shrink: 0;
-}
-.companion-footer p {
-  font-size: 8px;
-  line-height: 1.9;
-}
-.demo-key-note {
-  display: block;
-  font-size: 8px;
-  color: #a7b499;
-  margin-top: 15px;
 }
 .fit-bottom {
   display: flex;
@@ -1134,7 +844,7 @@ select:focus-visible {
   place-items: center;
   padding: 22px;
 }
-.planner-modal {
+.modal-panel {
   position: relative;
   background: #fbfcf8;
   border: 1px solid #edf0e5;
@@ -1146,24 +856,24 @@ select:focus-visible {
   overflow: auto;
   box-shadow: 0 25px 70px #27382920;
 }
-.planner-modal h2 {
+.modal-panel h2 {
   font-size: 28px;
   font-weight: 500;
   letter-spacing: -1px;
   margin: 15px 0 10px;
   line-height: 1.2;
 }
-.planner-modal > p:not(.fit-eyebrow) {
+.modal-panel > p:not(.fit-eyebrow) {
   font-size: 11px;
   color: #8c9b7e;
   line-height: 1.8;
   margin-bottom: 24px;
 }
-.planner-modal form {
+.modal-panel form {
   display: grid;
   gap: 17px;
 }
-.planner-modal label,
+.modal-panel label,
 .quantity-form label {
   display: grid;
   gap: 8px;
@@ -1171,8 +881,8 @@ select:focus-visible {
   color: #899c78;
   min-width: 0;
 }
-.planner-modal input,
-.planner-modal select,
+.modal-panel input,
+.modal-panel select,
 .quantity-form input,
 .quantity-form select {
   background: white;
@@ -1197,11 +907,11 @@ select:focus-visible {
   color: #9aaa8a;
   font-size: 22px;
 }
-.planner-modal .primary {
+.modal-panel .primary {
   margin-top: 9px;
   padding: 14px;
 }
-.planner-modal .checkbox-label {
+.modal-panel .checkbox-label {
   display: flex;
   align-items: center;
   font-size: 9px;
@@ -1231,23 +941,17 @@ select:focus-visible {
   font-size: 9px;
   padding: 12px;
 }
-.planner-modal .quantity-form {
+.modal-panel .quantity-form {
   display: flex;
   flex-direction: column;
   align-items: stretch;
 }
-.planner-modal .quantity-form .secondary {
+.modal-panel .quantity-form .secondary {
   margin-top: 8px;
 }
 @media (min-width: 1600px) {
   .fit-main {
     padding: 45px 55px;
-  }
-  .fit-columns {
-    grid-template-columns: minmax(0, 1fr) 355px;
-  }
-  .fit-companion {
-    padding: 35px;
   }
   .energy-body {
     gap: 40px;
@@ -1266,12 +970,6 @@ select:focus-visible {
   }
   .fit-header {
     padding: 0 24px;
-  }
-  .fit-columns {
-    grid-template-columns: minmax(0, 1fr) 275px;
-  }
-  .fit-companion {
-    padding: 27px 20px;
   }
   .nutrition-summary {
     gap: 13px;
@@ -1296,20 +994,6 @@ select:focus-visible {
   }
   .energy-title h2 {
     font-size: 14px;
-  }
-  .voice-invitation {
-    padding: 18px;
-    gap: 13px;
-    flex-wrap: wrap;
-  }
-  .voice-invitation > .primary {
-    margin-left: auto;
-  }
-  .invitation-art {
-    display: none;
-  }
-  .voice-invitation h2 {
-    font-size: 17px;
   }
   .energy-title .text-button {
     font-size: 8px;
@@ -1336,9 +1020,6 @@ select:focus-visible {
   }
   .fit-header > p {
     display: none;
-  }
-  .fit-columns {
-    grid-template-columns: minmax(0, 1fr) 255px;
   }
   .nutrition-summary {
     grid-template-columns: 1fr;
@@ -1437,10 +1118,6 @@ select:focus-visible {
   .private-badge .status-dot {
     display: none;
   }
-  .fit-columns {
-    display: flex;
-    flex-direction: column;
-  }
   .fit-main {
     padding: 28px 19px;
   }
@@ -1484,12 +1161,6 @@ select:focus-visible {
   .energy-title h2 {
     font-size: 15px;
   }
-  .voice-invitation > div {
-    flex: 1;
-  }
-  .voice-invitation {
-    flex-wrap: nowrap;
-  }
   .food-table-head,
   .food-row {
     grid-template-columns: minmax(0, 1fr) 66px 60px 46px;
@@ -1497,51 +1168,6 @@ select:focus-visible {
   .food-row > span:nth-child(3),
   .food-table-head > span:nth-child(3) {
     display: block;
-  }
-  .fit-companion {
-    border-left: 0;
-    border-top: 1px solid var(--fit-line);
-    padding: 29px;
-    margin: 0 19px 25px;
-    border-radius: 20px;
-    border: 1px solid #e4ebd8;
-    scroll-margin-top: 20px;
-  }
-  .fit-companion .avatar-stage {
-    width: 165px;
-    height: 165px;
-  }
-  .fit-companion .avatar-body {
-    width: 155px;
-    height: 155px;
-  }
-  .companion-caption {
-    height: auto;
-    min-height: 75px;
-    max-height: 180px;
-    font-size: 12px;
-  }
-  .fit-voice-controls {
-    max-width: 280px;
-    margin: 0 auto;
-  }
-  .fit-message-form {
-    max-width: 480px;
-    margin: 22px auto 0;
-  }
-  .conversation-starters {
-    max-width: 480px;
-    margin: 25px auto 0;
-  }
-  .fit-history {
-    max-width: 480px;
-    margin: 25px auto 0;
-  }
-  .companion-footer {
-    justify-content: center;
-  }
-  .demo-key-note {
-    text-align: center;
   }
   .fit-bottom {
     padding: 20px;
@@ -1594,19 +1220,6 @@ select:focus-visible {
   }
   .energy-title h2 {
     font-size: 16px;
-  }
-  .voice-invitation {
-    flex-wrap: wrap;
-  }
-  .voice-invitation > .primary {
-    margin: 5px 0 0;
-    width: 100%;
-  }
-  .voice-invitation h2 {
-    font-size: 21px;
-  }
-  .voice-invitation .fit-eyebrow {
-    font-size: 8px;
   }
   .section-heading h2 {
     font-size: 18px;
@@ -1662,14 +1275,10 @@ select:focus-visible {
   .fit-main {
     padding: 25px 15px;
   }
-  .fit-companion {
-    margin: 0 15px 20px;
-    padding: 25px 20px;
-  }
-  .planner-modal {
+  .modal-panel {
     padding: 30px 24px;
   }
-  .planner-modal h2 {
+  .modal-panel h2 {
     font-size: 25px;
   }
   .saved-meal-grid {
@@ -1734,7 +1343,7 @@ select:focus-visible {
     display: flex;
     position: fixed;
     bottom: 13px;
-    left: 73px;
+    left: 62px;
     right: 16px;
     background: #334d36f5;
     backdrop-filter: blur(10px);
@@ -1778,7 +1387,7 @@ select:focus-visible {
     flex-shrink: 0;
   }
   .mobile-companion-bar > .mobile-mic {
-    flex: 0;
+    flex: 0 0 auto;
     white-space: nowrap;
     border-left: 1px solid #516b46;
     font-size: 9px;
@@ -1788,8 +1397,8 @@ select:focus-visible {
 }
 
 /* Match native number fields and selects across browsers. */
-.planner-modal input:not([type="checkbox"]),
-.planner-modal select,
+.modal-panel input:not([type="checkbox"]),
+.modal-panel select,
 .quantity-form input,
 .quantity-form select {
   height: 44px;
@@ -1797,7 +1406,7 @@ select:focus-visible {
   line-height: 20px;
   align-self: end;
 }
-.planner-modal select,
+.modal-panel select,
 .quantity-form select {
   appearance: none;
   padding-right: 30px;

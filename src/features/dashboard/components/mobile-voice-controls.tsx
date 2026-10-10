@@ -1,16 +1,21 @@
 import type { SarjyVoice } from "../types";
 import { Icon } from "./icon";
 
-export function MobileVoiceControls({ voice, ready }: { voice: SarjyVoice; ready: boolean }) {
+export function MobileVoiceControls({
+  voice,
+  ready,
+  onOpen,
+}: {
+  voice: SarjyVoice;
+  ready: boolean;
+  onOpen: () => void;
+}) {
   return (
     <div className="mobile-companion-bar">
       <button
         aria-label="Open Sarjy voice conversation"
         disabled={!ready || voice.state === "connecting" || voice.micBusy}
-        onClick={() => {
-          document.getElementById("companion")?.scrollIntoView({ behavior: "smooth" });
-          if (!voice.connected) void voice.start(true);
-        }}
+        onClick={onOpen}
       >
         <span className="mobile-sarjy-mark">✳</span>
         <span>

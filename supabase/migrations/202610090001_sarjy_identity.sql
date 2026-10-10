@@ -1,5 +1,6 @@
 begin;
 
+-- One saved document per user; the version detects competing edits.
 create table if not exists public.sarjy_workspaces (
   user_id uuid primary key references auth.users(id) on delete cascade,
   version integer not null check (version >= 0),
@@ -10,6 +11,7 @@ create table if not exists public.sarjy_workspaces (
   updated_at timestamptz not null default now()
 );
 
+-- Shared per-minute limits for food actions and voice-session creation.
 create table if not exists public.sarjy_rate_limits (
   user_id uuid not null references auth.users(id) on delete cascade,
   scope text not null check (scope in ('actions', 'voice')),
@@ -18,6 +20,7 @@ create table if not exists public.sarjy_rate_limits (
   primary key (user_id, scope)
 );
 
+-- One-time bridge from existing local records to a Supabase identity.
 create table if not exists public.sarjy_legacy_imports (
   legacy_id uuid primary key,
   user_id uuid not null unique references auth.users(id) on delete cascade,
@@ -102,6 +105,7 @@ begin
 end;
 $$;
 
+-- Save atomically: retries do not duplicate changes; stale edits are rejected.
 create or replace function public.commit_sarjy_workspace(
   p_expected_version integer,
   p_next jsonb,
@@ -210,52 +214,5 @@ grant execute on function
   public.commit_sarjy_workspace(integer, jsonb, text),
   public.consume_sarjy_rate_limit(text)
 to authenticated;
-
-insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
-values(
-  'sarjy-labels',
-  'sarjy-labels',
-  false,
-  8388608,
-  array['image/jpeg', 'image/png', 'image/webp']
-)
-on conflict(id) do nothing;
-
-drop policy if exists sarjy_labels_read_own on storage.objects;
-drop policy if exists sarjy_labels_insert_own on storage.objects;
-drop policy if exists sarjy_labels_update_own on storage.objects;
-drop policy if exists sarjy_labels_delete_own on storage.objects;
-
-create policy sarjy_labels_read_own on storage.objects
-  for select to authenticated
-  using (
-    bucket_id = 'sarjy-labels'
-    and (storage.foldername(name))[1] = (select auth.uid()::text)
-  );
-
-create policy sarjy_labels_insert_own on storage.objects
-  for insert to authenticated
-  with check (
-    bucket_id = 'sarjy-labels'
-    and (storage.foldername(name))[1] = (select auth.uid()::text)
-  );
-
-create policy sarjy_labels_update_own on storage.objects
-  for update to authenticated
-  using (
-    bucket_id = 'sarjy-labels'
-    and (storage.foldername(name))[1] = (select auth.uid()::text)
-  )
-  with check (
-    bucket_id = 'sarjy-labels'
-    and (storage.foldername(name))[1] = (select auth.uid()::text)
-  );
-
-create policy sarjy_labels_delete_own on storage.objects
-  for delete to authenticated
-  using (
-    bucket_id = 'sarjy-labels'
-    and (storage.foldername(name))[1] = (select auth.uid()::text)
-  );
 
 commit;

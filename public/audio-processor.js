@@ -1,3 +1,4 @@
+// Runs on the browser audio thread; sends microphone samples to the Gemini client.
 class AudioProcessor extends AudioWorkletProcessor {
   constructor() {
     super();

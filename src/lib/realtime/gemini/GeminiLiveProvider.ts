@@ -5,15 +5,13 @@ import {
   type Session,
 } from "@google/genai";
 import { arrayBufferToBase64, float32ToPCM16 } from "../audio";
-import { conversationContext, type Workspace } from "../../../features/food-logging/model";
+import { context, type Workspace } from "../../../features/food-logging/model";
 import { SpeechActivityDetector } from "../speech-activity";
-import type { RealtimeProvider } from "../provider";
 import type { VoiceCaption, VoiceEvent, VoiceState } from "../types";
-import { PlaybackCaptions, userCaption } from "../captions";
 import { LiveInputTranscriber } from "./LiveInputTranscriber";
 import { LIVE_MODEL } from "./config";
 
-export class GeminiLiveProvider implements RealtimeProvider {
+export class GeminiLiveProvider {
   private session: Session | null = null;
   private output: AudioContext | null = null;
   private input: AudioContext | null = null;
@@ -40,7 +38,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
   private cancelledCalls = new Set<string>();
   private pendingCalls = new Map<string, AbortController>();
   private currentState: VoiceState = "idle";
-  private playbackCaptions = new PlaybackCaptions();
+  private assistantTranscript = "";
   private captionTurnOpen = false;
   private caption: VoiceCaption | null = null;
   private userTranscript = "";
@@ -57,22 +55,18 @@ export class GeminiLiveProvider implements RealtimeProvider {
 
   private showUserCaption(text: string, interim: boolean) {
     if (!this.speechActivity.assistant || this.speechActivity.user)
-      this.showCaption(userCaption(text, interim));
+      this.showCaption({ speaker: "user", text, interim });
   }
 
   private beginCaptionTurn() {
     if (this.captionTurnOpen) return;
-    this.playbackCaptions = new PlaybackCaptions();
+    this.assistantTranscript = "";
     this.captionTurnOpen = true;
   }
 
-  private updatePlaybackCaption() {
-    if (this.speechActivity.user) return;
-    const caption = this.playbackCaptions.at(
-      this.output?.currentTime ?? 0,
-      !!this.sources.size && this.output?.state !== "suspended",
-    );
-    if (caption) this.showCaption(caption);
+  private showAssistantCaption(interim: boolean) {
+    if (!this.assistantTranscript || this.speechActivity.user) return;
+    this.showCaption({ speaker: "assistant", text: this.assistantTranscript, interim });
   }
 
   get isConnected() {
@@ -94,9 +88,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
     if (speaker === "user" && active) {
       this.userTranscript = "";
       this.transcriber.resetUtterance();
-      this.showCaption(userCaption("", true));
-    } else if (speaker === "user" && this.caption?.speaker === "user") {
-      this.showCaption({ ...this.caption, activeWord: -1 });
+      this.showCaption({ speaker: "user", text: "", interim: true });
     }
   }
 
@@ -198,9 +190,9 @@ export class GeminiLiveProvider implements RealtimeProvider {
     }
     if (content?.outputTranscription?.text) {
       this.beginCaptionTurn();
-      this.playbackCaptions.append(content.outputTranscription.text);
+      this.assistantTranscript += content.outputTranscription.text;
       this.emit({ type: "assistant_transcript", text: content.outputTranscription.text });
-      this.updatePlaybackCaption();
+      this.showAssistantCaption(true);
     }
     for (const id of message.toolCallCancellation?.ids || []) {
       this.cancelledCalls.add(id);
@@ -220,8 +212,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
     }
     if (content?.turnComplete) {
       this.captionTurnOpen = false;
-      this.playbackCaptions.finish();
-      this.updatePlaybackCaption();
+      this.showAssistantCaption(false);
       this.assistantTurnOpen = false;
       this.emit({ type: "turn_complete" });
       if (!this.sources.size) this.emit({ type: "state", state: "listening" });
@@ -242,7 +233,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
           role: "user",
           parts: [
             {
-              text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(conversationContext(workspace))}. Read get_nutrition_context before your next food edit.`,
+              text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(context(workspace))}. Read get_nutrition_context before your next food edit.`,
             },
           ],
         },
@@ -293,8 +284,8 @@ export class GeminiLiveProvider implements RealtimeProvider {
           ...toolResult,
           context:
             this.latestWorkspace && this.latestWorkspace.version > workspace.version
-              ? conversationContext(this.latestWorkspace)
-              : result.context || conversationContext(workspace),
+              ? context(this.latestWorkspace)
+              : result.context || context(workspace),
         };
       } else if (response.status === 409) {
         const fresh = await fetch("/api/workspace", { cache: "no-store" }).then((res) =>
@@ -343,7 +334,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.stopPlayback();
     this.emit({ type: "turn_complete" });
     this.emit({ type: "user_transcript", text: text.trim() });
-    this.showCaption(userCaption(text.trim(), false));
+    this.showCaption({ speaker: "user", text: text.trim(), interim: false });
     this.emit({ type: "state", state: "thinking" });
     this.session.sendClientContent({
       turns: [{ role: "user", parts: [{ text: text.trim() }] }],
@@ -434,13 +425,10 @@ export class GeminiLiveProvider implements RealtimeProvider {
         this.setSpeechActivity("assistant", false);
         this.emit({ type: "state", state: "listening" });
       }
-      this.updatePlaybackCaption();
     };
     this.nextPlayback = Math.max(this.output.currentTime, this.nextPlayback);
     source.start(this.nextPlayback);
     this.nextPlayback += buffer.duration;
-    this.playbackCaptions.schedule(this.nextPlayback - buffer.duration, this.nextPlayback);
-    this.updatePlaybackCaption();
     this.emit({ type: "state", state: "speaking" });
   }
 
@@ -454,9 +442,9 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.nextPlayback = 0;
     this.assistantTurnOpen = false;
     this.captionTurnOpen = false;
-    this.playbackCaptions = new PlaybackCaptions();
+    this.assistantTranscript = "";
     if (this.caption?.speaker === "assistant")
-      this.showCaption({ ...this.caption, activeWord: -1, interim: false });
+      this.showCaption({ ...this.caption, interim: false });
     this.setSpeechActivity("assistant", false);
   }
 
@@ -506,7 +494,6 @@ export class GeminiLiveProvider implements RealtimeProvider {
             this.setSpeechActivity("user", this.userSpeech.update(level, now));
         }
         this.setSpeechActivity("assistant", this.assistantTurnOpen || this.sources.size > 0);
-        this.updatePlaybackCaption();
       }
       this.meterFrame = requestAnimationFrame(tick);
     };

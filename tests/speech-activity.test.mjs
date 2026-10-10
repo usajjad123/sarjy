@@ -1,18 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
 
-const source = readFileSync(
-  new URL("../src/lib/realtime/speech-activity.ts", import.meta.url),
-  "utf8",
-);
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext },
-});
-const { SpeechActivityDetector } = await import(
-  `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
-);
+import { compile } from "./helpers/typescript.mjs";
+
+const { SpeechActivityDetector } = await import(compile("../src/lib/realtime/speech-activity.ts"));
 
 const startSpeaking = (detector) => {
   assert.equal(detector.update(0.2, 0), false);

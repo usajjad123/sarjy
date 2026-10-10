@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import nextEnv from "@next/env";
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { compile } from "../tests/helpers/typescript.mjs";
 nextEnv.loadEnvConfig(process.cwd(), true, { info() {}, error() {} });
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
   key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -11,14 +10,6 @@ const client = () =>
   createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-function compile(path, imports = {}) {
-  let { outputText } = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  for (const [name, target] of Object.entries(imports))
-    outputText = outputText.replaceAll(`from "${name}"`, `from "${target}"`);
-  return `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`;
-}
 const engine = compile("../src/features/nutrition/engine.ts");
 const { emptyWorkspace, applyAction } = await import(
   compile("../src/features/food-logging/model.ts", { "../nutrition/engine": engine })
@@ -103,30 +94,32 @@ const owned = await a.from("sarjy_workspaces").select("data");
 assert.equal(owned.error, null);
 assert.equal(owned.data.length, 1);
 assert.equal(owned.data[0].data.memories[0].value, "Only user A can read this");
-const png = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfN8AAAAASUVORK5CYII=",
-  "base64",
+const reinitialized = await a.rpc("initialize_sarjy_workspace", {
+  p_initial: emptyWorkspace(),
+});
+assert.equal(reinitialized.error, null);
+assert.deepEqual(
+  reinitialized.data,
+  owned.data[0].data,
+  "Initialization must preserve saved records",
 );
-const path = `${aId}/test-${crypto.randomUUID()}.png`;
-const uploaded = await a.storage
-  .from("sarjy-labels")
-  .upload(path, png, { contentType: "image/png" });
-assert.equal(uploaded.error, null, "Owner upload must work");
-try {
-  const ownDownload = await a.storage.from("sarjy-labels").download(path);
-  assert.equal(ownDownload.error, null);
-  const otherDownload = await b.storage.from("sarjy-labels").download(path);
-  assert.ok(otherDownload.error, "Another user must not read this image");
-  const otherUpload = await b.storage
-    .from("sarjy-labels")
-    .upload(`${aId}/forbidden-${crypto.randomUUID()}.png`, png, { contentType: "image/png" });
-  assert.ok(otherUpload.error, "Another user must not write this folder");
-  const unsigned = await fetch(`${url}/storage/v1/object/public/sarjy-labels/${path}`);
-  assert.equal(unsigned.ok, false, "Bucket must not be public");
-} finally {
-  const cleanup = await a.storage.from("sarjy-labels").remove([path]);
-  assert.equal(cleanup.error, null, "Clean up only the test image created by this script");
+let limitError;
+let allowedRequests = 0;
+// A run may cross a minute boundary, so allow one bucket reset.
+for (let attempt = 0; attempt < 25; attempt++) {
+  const result = await a.rpc("consume_sarjy_rate_limit", { p_scope: "voice" });
+  if (result.error) {
+    limitError = result.error;
+    break;
+  }
+  allowedRequests++;
 }
+assert.ok(allowedRequests >= 12, "Allow the configured voice-session limit");
+assert.match(limitError?.message || "", /SARJY_RATE_LIMIT/);
+const otherUserLimit = await b.rpc("consume_sarjy_rate_limit", { p_scope: "voice" });
+assert.equal(otherUserLimit.error, null, "Limits must be separate for each user");
+const actionLimit = await a.rpc("consume_sarjy_rate_limit", { p_scope: "actions" });
+assert.equal(actionLimit.error, null, "Voice limits must not block food actions");
 const ref = new URL(url).hostname.split(".")[0];
 const fake =
   "base64-" +
@@ -147,12 +140,13 @@ console.log(
         "distinct user identities",
         "legacy import ownership",
         "persistent memory",
+        "initialization preserves records",
         "RLS read isolation",
         "direct write denial",
         "unauthenticated denial",
         "concurrent conflict",
         "idempotent RPC replay",
-        "private image ownership",
+        "per-user and per-scope request limits",
         "forged session rejection",
       ],
       testAccounts: "Two isolated anonymous test users; no existing user records were modified",

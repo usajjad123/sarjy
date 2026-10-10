@@ -6,7 +6,7 @@ import { localDate } from "@/features/nutrition/engine";
 import { useSarjy } from "@/hooks/use-sarjy";
 import { loadWorkspace } from "@/lib/load-workspace";
 import type { VoiceEvent } from "@/lib/realtime/types";
-import { actionLabels } from "./action-labels";
+import { actionLabels, savedChangeLabels } from "./action-labels";
 import type { FoodAction } from "./types";
 
 export function useDiaryWorkspace() {
@@ -19,6 +19,7 @@ export function useDiaryWorkspace() {
   const [storage, setStorage] = useState("");
   const [status, setStatus] = useState("");
   const [lookup, setLookup] = useState("");
+  const [change, setChange] = useState<{ name: string; version: number } | null>(null);
 
   const accept = useCallback((next: Workspace) => {
     if (current.current && next.version < current.current.version) return;
@@ -28,7 +29,13 @@ export function useDiaryWorkspace() {
   const onVoice = useCallback(
     (event: Extract<VoiceEvent, { type: "workspace" }>) => {
       accept(event.workspace);
-      if (event.action) setStatus(actionLabels[event.action] || "Records updated");
+      if (event.action) {
+        setStatus(
+          savedChangeLabels[event.action] || actionLabels[event.action] || "Records updated",
+        );
+        if (savedChangeLabels[event.action])
+          setChange({ name: event.action, version: event.workspace.version });
+      }
     },
     [accept],
   );
@@ -83,6 +90,7 @@ export function useDiaryWorkspace() {
       }
       accept(body.workspace);
       voice.sync(body.workspace);
+      if (savedChangeLabels[name]) setChange({ name, version: body.workspace.version });
       setStatus(
         name === "commit_food_log"
           ? "Meal logged. Your totals are up to date."
@@ -120,6 +128,7 @@ export function useDiaryWorkspace() {
     storage,
     lookup,
     voice,
+    change,
     runAction,
   };
 }

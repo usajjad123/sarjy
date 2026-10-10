@@ -70,7 +70,7 @@ export function calculate(food: Food, q: Quantity) {
   ) as Nutrients;
   return { grams, nutrients };
 }
-export const zero = (): Nutrients => ({ calories: 0, protein: 0, carbs: 0, fat: 0 });
+const zero = (): Nutrients => ({ calories: 0, protein: 0, carbs: 0, fat: 0 });
 export function sum(items: Nutrients[]): Nutrients {
   return items.reduce((total, item) => {
     for (const key of Object.keys(total) as (keyof Nutrients)[]) total[key] += item[key];

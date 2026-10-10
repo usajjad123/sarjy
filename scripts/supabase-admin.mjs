@@ -42,15 +42,13 @@ try {
       "utf8",
     );
     await api("/database/query", "POST", { query });
-    console.log(
-      "Sarjy schema, row policies, transactional functions, and private label bucket applied",
-    );
+    console.log("Sarjy workspace, import ownership, request limits and access policies applied");
   } else if (command === "verify") {
     const auth = await api("/config/auth");
     const rows = await api("/database/query", "POST", {
       read_only: true,
       query:
-        "select jsonb_build_object('tables',(select jsonb_agg(jsonb_build_object('name',tablename,'rls',rowsecurity)) from pg_tables where schemaname='public' and tablename like 'sarjy_%'),'bucket',(select jsonb_build_object('id',id,'public',public) from storage.buckets where id='sarjy-labels')) as setup;",
+        "select jsonb_build_object('tables',(select jsonb_agg(jsonb_build_object('name',tablename,'rls',rowsecurity)) from pg_tables where schemaname='public' and tablename like 'sarjy_%')) as setup;",
     });
     console.log(
       JSON.stringify({ anonymousEnabled: auth.external_anonymous_users_enabled, schema: rows }),

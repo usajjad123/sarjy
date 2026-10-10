@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
 
-const source = readFileSync(
-  new URL("../src/features/dashboard/calendar.ts", import.meta.url),
-  "utf8",
-);
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-});
+import { compile } from "./helpers/typescript.mjs";
+
 const { shiftDay, shiftMonth, calendarDays, dayTitle, formatDiaryDate } = await import(
-  `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+  compile("../src/features/dashboard/calendar.ts")
 );
 
 test("diary navigation crosses months, years and leap days without skipping a date", () => {

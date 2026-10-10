@@ -1,4 +1,4 @@
-import { PlannerDialog } from "@/components/planner-dialog";
+import { Modal } from "@/components/modal";
 import type { FoodAction } from "../types";
 import type { Meal } from "@/features/food-logging/model";
 export function SaveMealDialog({
@@ -15,8 +15,8 @@ export function SaveMealDialog({
   onClose: () => void;
 }) {
   return (
-    <PlannerDialog labelId="save-title" onClose={() => onClose()}>
-      <button className="dialog-close" aria-label="Close" onClick={() => onClose()}>
+    <Modal labelId="save-title" onClose={onClose}>
+      <button className="dialog-close" aria-label="Close" onClick={onClose}>
         ×
       </button>
       <p className="fit-eyebrow">LESS EFFORT NEXT TIME</p>
@@ -58,6 +58,6 @@ export function SaveMealDialog({
           Remember meal <span>♡</span>
         </button>
       </form>
-    </PlannerDialog>
+    </Modal>
   );
 }

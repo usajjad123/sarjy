@@ -1,138 +1,164 @@
-import { useState, type FormEvent } from "react";
-import { VoiceParticipant } from "@/components/voice-participant";
+import type { ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { SarjyAvatar } from "@/components/sarjy-avatar";
 import type { SarjyVoice } from "../types";
-import { actionLabels as labels } from "../action-labels";
+import { useModalFocus } from "@/hooks/use-modal-focus";
+import { actionLabels } from "../action-labels";
 import { Icon } from "./icon";
 import { LiveCaption } from "./live-caption";
+import { ConversationTools } from "./conversation-tools";
+import styles from "./voice-companion.module.css";
+
 export function VoiceCompanion({
   voice,
   ready,
   lookup,
+  expanded,
+  onOpen,
+  onClose,
+  onEnd,
+  children,
 }: {
   voice: SarjyVoice;
   ready: boolean;
   lookup: string;
+  expanded: boolean;
+  onOpen: (microphone: boolean) => void;
+  onClose: () => void;
+  onEnd: () => void;
+  children?: ReactNode;
 }) {
-  const [message, setMessage] = useState("");
-  const latest = voice.transcript.at(-1);
+  const reduced = useReducedMotion();
+  const panel = useModalFocus(expanded, onClose, "[data-open-conversation]");
   const visibleTool =
     voice.tool && !["get_nutrition_context", "remember_fact", "forget_fact"].includes(voice.tool)
       ? voice.tool
       : null;
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    if (await voice.send(message)) setMessage("");
-  };
+  const connecting = voice.state === "connecting";
+
   return (
-    <aside className="fit-companion" id="companion">
-      <div className="companion-heading">
-        <p className="fit-eyebrow">YOUR EVERYDAY COMPANION</p>
-        <span className={`connection-dot ${voice.connected ? "online" : ""}`} />
-      </div>
-      <VoiceParticipant
-        speaker="assistant"
-        level={voice.assistantLevel}
-        speaking={voice.speaking.assistant}
-        connected={voice.connected}
-        microphone={voice.mic}
-        thinking={voice.state === "thinking" || !!voice.tool}
-        subtitle="A little help. A little less effort."
-      />
-      <div className="companion-caption" aria-live="off">
-        {visibleTool && !voice.speaking.user && !voice.speaking.assistant ? (
-          <p className="working-caption">{labels[visibleTool] || "Updating your records"}…</p>
-        ) : (
-          <LiveCaption caption={voice.caption} fallback={latest} />
-        )}
-      </div>
-      <div className="fit-voice-controls">
-        {voice.connected ? (
-          <>
-            <button
-              className={`secondary mic-toggle ${voice.mic ? "on" : ""}`}
-              disabled={voice.micBusy}
-              onClick={voice.toggleMic}
-            >
-              <Icon name="mic" />
-              {voice.mic ? "Mic on" : "Mic off"}
+    <div className={styles.slot}>
+      <motion.section
+        ref={panel}
+        layout={!reduced}
+        layoutRoot={expanded}
+        layoutScroll
+        layoutDependency={expanded}
+        transition={{ layout: { duration: reduced ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] } }}
+        style={{ borderRadius: expanded ? 0 : 28 }}
+        className={`${styles.panel} ${expanded ? styles.expanded : ""}`}
+        role={expanded ? "dialog" : undefined}
+        aria-modal={expanded ? true : undefined}
+        aria-label={expanded ? "Conversation with Sarjy" : "Your companion Sarjy"}
+        tabIndex={-1}
+        id="companion"
+      >
+        <motion.div layout={reduced ? false : "position"} className={styles.topbar}>
+          <span className="fit-eyebrow">
+            {expanded ? "JUST YOU & SARJY" : "YOUR EVERYDAY COMPANION"}
+          </span>
+          {expanded ? (
+            <button data-conversation-back className={styles.back} onClick={onClose}>
+              <span aria-hidden="true">←</span> Back to my day
             </button>
-            <button className="secondary" onClick={voice.end}>
-              End
+          ) : (
+            <span className={`connection-dot ${voice.connected ? "online" : ""}`} />
+          )}
+        </motion.div>
+        <motion.div layout={reduced ? false : "position"} className={styles.canvas}>
+          <SarjyAvatar
+            level={voice.assistantLevel}
+            speaking={voice.speaking.assistant}
+            connected={voice.connected}
+            thinking={voice.state === "thinking" || !!visibleTool}
+          />
+          <div className={styles.caption} aria-live="off">
+            {visibleTool && !voice.speaking.user && !voice.speaking.assistant ? (
+              <p>{actionLabels[visibleTool] || "Updating your records"}…</p>
+            ) : voice.caption || voice.transcript.length ? (
+              <LiveCaption caption={voice.caption} fallback={voice.transcript.at(-1)} />
+            ) : (
+              <p>
+                Tell me what you ate.
+                <br />
+                We’ll take care of the details together.
+              </p>
+            )}
+          </div>
+        </motion.div>
+        <motion.div layout={reduced ? false : "position"} className={styles.interaction}>
+          {expanded && voice.error && (
+            <p className={styles.error} role="alert">
+              {voice.error}
+              <button onClick={voice.clearError} aria-label="Dismiss conversation error">
+                ×
+              </button>
+            </p>
+          )}
+          <div className={styles.controls}>
+            {expanded && voice.connected ? (
+              <>
+                <button
+                  className={`primary ${styles.mic}`}
+                  disabled={voice.micBusy}
+                  aria-pressed={voice.mic}
+                  onClick={voice.toggleMic}
+                >
+                  <Icon name="mic" />
+                  {voice.micBusy ? "One moment…" : voice.mic ? "Mic on" : "Mic off"}
+                </button>
+                <button className="secondary" onClick={onEnd}>
+                  End conversation
+                </button>
+              </>
+            ) : (
+              <button
+                className="primary"
+                data-open-conversation={!expanded ? true : undefined}
+                disabled={!ready || connecting || voice.micBusy}
+                onClick={() => onOpen(true)}
+              >
+                <Icon name="mic" />
+                {connecting
+                  ? "Connecting…"
+                  : voice.connected
+                    ? "Continue conversation"
+                    : "Talk to Sarjy"}
+                <span aria-hidden="true">↗</span>
+              </button>
+            )}
+          </div>
+          <p className={styles.activity} data-speaking={voice.speaking.user}>
+            {connecting
+              ? "Connecting to Sarjy…"
+              : voice.speaking.assistant
+                ? "Sarjy is speaking"
+                : voice.state === "thinking" || visibleTool
+                  ? "Thinking it through…"
+                  : voice.mic
+                    ? voice.speaking.user
+                      ? "You’re speaking"
+                      : "Mic on · You can interrupt"
+                    : voice.connected
+                      ? "Microphone off · Type or turn it on"
+                      : "No judgment. Just a conversation."}
+            {voice.mic && voice.captionStatus === "delayed" && " · Captions appear after your turn"}
+          </p>
+          {!expanded && (
+            <button className={styles.typeLink} onClick={() => onOpen(false)} disabled={!ready}>
+              Prefer to type?
             </button>
-          </>
-        ) : (
-          <button
-            className="primary"
-            disabled={!ready || voice.state === "connecting"}
-            onClick={() => voice.start(true)}
-          >
-            <Icon name="mic" />
-            {voice.state === "connecting" ? "Connecting…" : "Let’s talk"}
-          </button>
-        )}
-      </div>
-      {voice.mic && (
-        <div className="user-activity" data-speaking={voice.speaking.user}>
-          <span className="status-dot active" />
-          {voice.speaking.user ? "You’re speaking" : "Listening · You can interrupt"}
-          {voice.captionStatus === "delayed" && " · Captions appear after your turn"}
-        </div>
-      )}
-      <form className="fit-message-form" onSubmit={send}>
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          aria-label="Message Sarjy"
-          placeholder="Or type what you ate…"
+          )}
+          {expanded && <div className={styles.result}>{children}</div>}
+        </motion.div>
+        <ConversationTools
+          voice={voice}
+          ready={ready}
+          lookup={lookup}
+          expanded={expanded}
+          onOpen={onOpen}
         />
-        <button
-          aria-label="Send message"
-          disabled={!ready || !message.trim() || voice.state === "connecting"}
-        >
-          <Icon name="arrow" />
-        </button>
-      </form>
-      <div className="conversation-starters">
-        <p>TRY SAYING</p>
-        {[
-          "How much protein have I eaten today?",
-          "Undo my last change.",
-          "Remember this as my usual lunch.",
-        ].map((p) => (
-          <button
-            key={p}
-            disabled={!ready || voice.state === "connecting"}
-            onClick={() => voice.send(p)}
-          >
-            {p}
-            <span>↗</span>
-          </button>
-        ))}
-      </div>
-      <details className="fit-history">
-        <summary>
-          Conversation <span>{voice.transcript.length}</span>
-        </summary>
-        <div>
-          {voice.transcript.map((t, i) => (
-            <article key={i} className={t.role}>
-              <strong>{t.role === "user" ? "You" : "Sarjy"}</strong>
-              <p>{t.text}</p>
-            </article>
-          ))}
-        </div>
-      </details>
-      <div className="companion-footer">
-        <Icon name="leaf" />
-        <p>
-          No judgment. No unsolicited advice.
-          <br />
-          Just your food, clearly recorded.
-        </p>
-      </div>
-      {lookup === "demo" && (
-        <small className="demo-key-note">USDA demo access · Limited lookup quota</small>
-      )}
-    </aside>
+      </motion.section>
+    </div>
   );
 }

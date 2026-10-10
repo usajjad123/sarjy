@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
 
-const source = readFileSync(new URL("../src/lib/load-workspace.ts", import.meta.url), "utf8");
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext },
-});
-const { loadWorkspace } = await import(
-  `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
-);
+import { compile } from "./helpers/typescript.mjs";
+
+const { loadWorkspace } = await import(compile("../src/lib/load-workspace.ts"));
 
 test("concurrent first loads share one request and anonymous identity", async (t) => {
   let finish;

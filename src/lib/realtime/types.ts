@@ -4,7 +4,6 @@ export type VoiceState = "idle" | "connecting" | "listening" | "thinking" | "spe
 export type VoiceCaption = {
   speaker: "user" | "assistant";
   text: string;
-  activeWord: number;
   interim: boolean;
 };
 export type VoiceEvent =
