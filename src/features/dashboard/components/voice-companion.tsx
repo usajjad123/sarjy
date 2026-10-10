@@ -14,6 +14,10 @@ export function VoiceCompanion({
 }) {
   const [message, setMessage] = useState("");
   const latest = voice.transcript.at(-1);
+  const visibleTool =
+    voice.tool && !["get_nutrition_context", "remember_fact", "forget_fact"].includes(voice.tool)
+      ? voice.tool
+      : null;
   const send = async (event: FormEvent) => {
     event.preventDefault();
     if (await voice.send(message)) setMessage("");
@@ -34,8 +38,8 @@ export function VoiceCompanion({
         subtitle="A little help. A little less effort."
       />
       <div className="companion-caption" aria-live="polite">
-        {voice.tool ? (
-          <p className="working-caption">{labels[voice.tool] || "Updating your records"}…</p>
+        {visibleTool ? (
+          <p className="working-caption">{labels[visibleTool] || "Updating your records"}…</p>
         ) : latest ? (
           <p>
             <small>{latest.role === "user" ? "You" : "Sarjy"}</small>
