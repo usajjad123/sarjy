@@ -1,22 +1,36 @@
 # Sarjy Fit
 
-**Eat normally. Track effortlessly.** A voice-first nutrition dashboard with Gemini Live, USDA FoodData Central, anonymous browser memory and a structured Log → Correct → Undo → Remember workflow.
+**Eat normally. Track effortlessly.** A voice-first nutrition tracker with Gemini Live, USDA FoodData Central and persistent anonymous-user records. The main workflow is **Log → Correct → Undo → Remember**; the database is the source of truth for intake and memory.
 
-The itinerary product is preserved on the local `codex/sarjy-itinerary` branch at `135fd9d`. Nutrition work lives on `codex/sarjy-fit`. Its local database is separate; the old itinerary database stays intact.
+Nutrition work lives on `codex/sarjy-fit`. The itinerary prototype is preserved locally on `codex/sarjy-itinerary` at `135fd9d`, with its original database intact.
 
 ## Run locally
 
+Use Node.js 22 (the runtime used for validation) and npm.
+
 ```sh
 npm install
-cp env.example .env.local # Fill in keys; preserve an existing .env.local instead if present.
+# Only create this file if you do not already have one:
+cp env.example .env.local
+# Fill in the settings below before starting:
 npm run dev -- --hostname 127.0.0.1 --port 3001
 ```
 
-Open http://127.0.0.1:3001. Gemini needs `GEMINI_API_KEY` with access to the configured Live model. Food lookup uses `USDA_API_KEY`; development falls back to USDA's official, heavily rate-limited `DEMO_KEY`. A real key is required in production. Keys only run on the server; the browser gets a short-lived constrained Gemini token.
+Open [the local instance](http://127.0.0.1:3001). Manual logging works without Gemini; voice and typed conversation both use Gemini Live. Typing does not require microphone permission. Microphone access requires localhost or HTTPS and browser permission.
 
-Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to use Supabase Auth and PostgreSQL. Sarjy creates an anonymous authenticated identity automatically, keeps session cookies HttpOnly and refreshes/verifies them in API Route Handlers. Food logs, drafts, goals, memories and reusable foods/meals are attached to that user; no signup screen is needed. Clearing cookies loses access to that anonymous identity. Account linking and cross-device recovery are future work.
+| Setting                                | Purpose                                                                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`                       | Server-only key for constrained Live tokens. The configured conversation model is `gemini-3.8-live`; interim captions use `gemini-3.5-transcribe-live`. |
+| `USDA_API_KEY`                         | Server-only FoodData Central key. Development uses the limited `DEMO_KEY` if omitted; production has no demo fallback.                                  |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL.                                                                                                                                   |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key; required with the URL for Supabase storage. It is a public setting, not a privileged secret.                                  |
+| `SUPABASE_ACCESS_TOKEN`                | Optional, local management token for the setup script only. Never deploy it.                                                                            |
 
-Apply `supabase/migrations/202610090001_sarjy_identity.sql` in your project's SQL editor and enable **Allow anonymous sign-ins** in Auth settings. Alternatively, a server-only `SUPABASE_ACCESS_TOKEN` can run the setup below. That token is used only by the management script; the running app uses the publishable key and each user's verified session. Supabase is the production database.
+The Gemini account must have access to the configured models. The browser receives constrained ephemeral tokens, never the Gemini or USDA API key. Without both Supabase settings, development uses `.data/sarjy-fit.db`. Omit both placeholder settings if using this local fallback. Production requires Supabase and refuses filesystem storage.
+
+## Supabase setup and identity
+
+Apply [the migration](supabase/migrations/202610090001_sarjy_identity.sql) in the project's SQL editor and enable **Allow anonymous sign-ins** in Auth settings. Alternatively, put a management token in `.env.local` and run:
 
 ```sh
 node scripts/supabase-admin.mjs inspect
@@ -25,69 +39,73 @@ node scripts/supabase-admin.mjs migrate
 node scripts/supabase-admin.mjs verify
 ```
 
-Development imports an existing browser's local SQLite record once, keeps the original backup and prevents another identity from claiming the same import. Initial requests share the session bootstrap so React's development effect replay cannot create competing accounts.
+The script targets the project in `NEXT_PUBLIC_SUPABASE_URL`. `verify` reports anonymous-auth configuration and table/RLS presence; use the live tests below to exercise permissions and transactional behavior.
 
-The SQL setup has three tables and three functions. `sarjy_workspaces` stores the user's records; initialization creates them once, and commit checks versions and retry IDs before saving. `sarjy_rate_limits` and its consume function enforce per-minute request limits across server instances. `sarjy_legacy_imports` records ownership when importing old local data; new users do not need an import. Row policies and grants keep records private and deny direct table writes. No image-storage setup is included; an already-created bucket is left untouched.
+The app creates an anonymous authenticated identity automatically. API Route Handlers verify/refresh its HttpOnly session cookies. Meals, drafts, goals, preferences and reusable foods/meals belong to that identity. They persist across reloads and later visits in the same browser while its session remains available. Clearing cookies loses access; signup, login, account linking and cross-device recovery are not implemented. SMTP is not used.
 
-Without Supabase, local development uses `.data/sarjy-fit.db`; production requires Supabase and refuses filesystem fallback.
+When moving local development records to Supabase, the old `sarjy_guest` cookie identifies a one-time, read-only SQLite import. The original database remains intact; import ownership prevents another identity from claiming the same import. Hosted deployments do not import files from the local machine. The browser shares its initial workspace request to avoid competing identities during React development effect replay.
 
-## Working increment
+## Current experience
 
-- Streaming Gemini voice, interruptions, live captions, stable audio-reactive avatar and text fallback.
-- Daily calorie/macronutrient totals, editable targets, historical diary, browser timezone and manual quantity changes.
-- A persisted multi-food draft: resolve USDA foods, resolve preparation/portions, validate all items, atomically commit.
-- Server calculations and source references on every entry. Unknown nutrients/conversions never become fabricated zeros or grams.
-- Corrections, removal, undo, personal memories, reusable meals, confirmed food library and copying historical meals.
-- Version conflicts, tool cancellation recovery, idempotency keys and committed batch deduplication.
-- Drafts survive unrelated conversation, failed lookup and refresh. Intake totals exclude drafts.
+- Sarjy occupies the left half of the desktop overview; date navigation, daily energy, macros and recent meals occupy the right. The full diary sits below. Mobile puts Sarjy first, with sticky voice controls.
+- Talk to Sarjy expands the same mounted companion into a focused conversation using Motion. Back to my day/Escape preserves the session **and the microphone's current state**; End conversation disconnects. Pauses do not change views. Reduced-motion settings disable the expansion animation.
+- Meals start collapsed, showing food count, calories, protein, carbs and fat. Expand one for food names, portions, USDA links, quantity edits, removal and Remember meal.
+- Previous/next-day controls surround a custom date picker with month navigation, logged-day markers and keyboard support. Manual logging uses the selected diary date; voice logging needs its own date context or an explicit date in the request.
+- Voice or manual logging creates a persisted draft. Resolve food/preparation and portions, then save every item together. Unresolved drafts do not affect daily intake. Errors, refreshes and unrelated conversation preserve the draft.
+- Correct/remove/undo, configurable targets, reusable meals, confirmed USDA foods, editable key/value preferences, timezone settings and JSON export are available. JSON import is not implemented.
 
-Live microphone captions use a second, transcription-only `gemini-3.5-transcribe-live` connection while the mic is enabled. It shares the same audio with Gemini and adds transcription usage; turning the mic off closes that connection. Interim hypotheses replace earlier text without entering conversation history or changing food records. The conversational model's final transcript remains authoritative. If live transcription is unavailable or its 10-minute session ends, the voice conversation continues with finalized captions and a visible fallback notice.
+Logging, portion edits, removal, undo and remembering a meal show confirmation cards in the expanded view. Sarjy is instructed to give a brief acknowledgment for food actions while tools run, then confirm only after success. Known preferences are recalled naturally; context reads and memory tools are kept out of the visible progress label. These conversational choices are model instructions, not deterministic guarantees.
 
-Captions display plain text as real transcription updates arrive, without estimated word highlighting. Sarjy's reply text accumulates within each turn and resets for the next reply or interruption. Preferences are recalled naturally from saved context, with silent refreshes when needed.
+Captions show actual incoming transcription as plain text. Estimated word highlighting was removed. A second transcription-only connection shares mic audio while the microphone is enabled, adding Gemini usage. Its token expires after 10 minutes; no client timer guarantees that socket lifetime. If caption setup/streaming fails or closes, conversation continues with finalized captions and a visible fallback notice. Mic off closes the caption connection. Assistant text accumulates per turn and resets on the next reply/interruption.
 
-## Boundaries
+Conversation text is held in React state: Back preserves it, starting a new connection clears it, and a page reload loses it. Saved preferences and food/workflow records persist separately; full conversations and automatic conversation highlights are not stored.
 
-The route in `src/app/page.tsx` only renders the dashboard. `features/dashboard/sarjy-dashboard.tsx` composes focused views, forms and voice components; `use-diary-workspace.ts` owns fetching, version checks and manual mutations. Dialog state is a discriminated union, so only one form can be open at a time. Calendar presentation has scoped CSS, with focus/keyboard behavior in `use-diary-calendar.ts` and timezone-independent civil-date helpers in `calendar.ts`.
+## Architecture and reliability
 
-`public/audio-processor.js` is the browser AudioWorklet that collects microphone samples for Gemini. `GeminiLiveProvider.ts` handles the live session, ordered tools and playback; `LiveInputTranscriber.ts` adds interim captions. `components/sarjy-avatar.tsx` renders the current character with scoped CSS, and `components/modal.tsx` provides the shared dialog boundary. `use-modal-focus.ts` owns focus trapping, Escape handling and focus restoration for dialogs and the expanded conversation. Tests share one TypeScript fixture loader.
+The implemented stack is Next.js 16.4 App Router, React 19.3 with React Compiler, TypeScript, Tailwind CSS 4 plus CSS modules, Motion, `bot-avatars`, Gemini's SDK and Supabase Auth/PostgreSQL. Local development uses `@libsql/client` for SQLite. There is no ORM, Zustand store or generic voice-provider interface.
 
-`features/nutrition/engine.ts` owns units and arithmetic. `features/food/usda.ts` searches SR Legacy/Foundation records and normalizes exact nutrient IDs/units. `features/food-logging/model.ts` is the pure state/command reducer; `store.ts` handles guest identity, persistence, limits and atomic version checks. `/api/food-action` is the only mutation endpoint. Gemini proposes commands; it cannot submit its own nutrient numbers. Voice and manual UI edits use identical validation and server state.
+- `src/app/page.tsx` renders the dashboard. `src/features/dashboard/` contains focused components, calendar helpers and `use-diary-workspace.ts` for loading/version checks/manual actions.
+- `src/features/food-logging/model.ts` is the pure command reducer; `store.ts` handles verified ownership, persistence and request limits. Voice and UI send commands to `/api/food-action`.
+- `src/features/food/usda.ts` searches SR Legacy/Foundation records and fetches verified nutrients/portions. `src/features/nutrition/engine.ts` performs conversions and arithmetic.
+- `src/lib/realtime/gemini/` owns session configuration, streaming audio, ordered tools, playback and interim transcription. `public/audio-processor.js` is required: the browser loads it as an AudioWorklet to batch microphone samples.
+- `src/components/sarjy-avatar.tsx` uses playback activity and spring-smoothed levels. Local speech detection stabilizes visual state; it does not filter audio sent to Gemini or guarantee noise-free barge-in.
+- `src/components/modal.tsx` and `src/hooks/use-modal-focus.ts` share focus trapping, Escape and focus restoration with the expanded conversation.
 
-Supabase stores each user's domain document as JSONB plus a version in `sarjy_workspaces`. Row-level security allows only that authenticated user to read their state. Direct table writes are denied; transactional RPCs derive the owner from `auth.uid()`, lock the row, check versions and replay keys, and commit the complete next state atomically. The app's reducer validates commands and calculates nutrition before this commit. Authenticated users can also call these RPCs for their own workspace; SQL enforces ownership and save consistency, but does not independently validate every food or nutrient value. This document model keeps a multistep workflow atomic; normalizing large histories is future work. Undo retains the latest 20 intake/memory operations as before snapshots; undo clears the current draft to avoid applying it against restored state.
+Supabase has three tables: the versioned JSONB workspace, per-user request limits and legacy-import ownership. Three RPCs initialize, commit and consume limits. RLS restricts workspace reads; direct table writes are denied. Commit derives ownership from `auth.uid()`, locks the row and checks versions/retry IDs. The server reducer validates nutrition before saving. Authenticated users can also invoke these RPCs on their own document; SQL enforces ownership/save consistency, not complete nutritional validation. No storage bucket or image policies are included in the migration; any older bucket is left untouched.
 
-Food definitions and logged entries are separate snapshots. Replacing a usual meal never rewrites past consumption. Serving conversions need USDA gram weights; US volume units convert using standard ml factors disclosed in the portion label. Pieces with multiple sizes require an explicit portion ID. Real-world composition still varies: verified source data is not a claim of perfect individual-meal accuracy.
+Food definitions and consumed entries are separate snapshots. Updating/forgetting a reusable meal does not rewrite historical intake. Non-gram units need verified USDA portion weights; ml never defaults to grams. Missing nutrients/conversions are rejected rather than fabricated. The last 20 tracked operations support snapshot-based undo, which clears the pending draft and preserves the current timezone.
 
-Food matching and reference interpretation are Gemini decisions guided by tool context. The deterministic reducer guarantees validated IDs/quantities and database consistency, but cannot guarantee every natural-language interpretation is correct. Automated scenarios test command/state behavior, not a claim of measured LLM accuracy.
-
-Voice tools are non-blocking: Sarjy gives a short spoken acknowledgment while looking up food or applying an edit, then confirms only after the corresponding successful result. Tool results use `WHEN_IDLE` scheduling so they do not cut off the acknowledgment. The client still serializes database actions and keeps version/idempotency checks; the model must wait for returned IDs and resolved quantities before requesting dependent steps. This reduces perceived silence, not the underlying USDA/database processing time. A new conversation is required after changing the session configuration.
-
-Retries of the same command key or commit batch cannot duplicate intake. A newly spoken, distinct request can create another meal; semantic duplicate detection across separate user turns is not implemented. Read state after interrupted or uncertain commits before retrying.
+Voice tools execute in order, with non-blocking declarations and `WHEN_IDLE` results so acknowledgments can play while work runs. Version checks protect against concurrent UI edits. Reusing a retained command ID or batch ID cannot duplicate intake; a distinct new request can log another meal. An interrupted request may have committed, so read fresh state before retrying. Natural-language food matching and reference resolution remain Gemini decisions and need live evaluation.
 
 ## Why FoodData Central
 
-FoodData Central provides authoritative generic food records with preparation distinctions, nutrient values and portion weights. It makes the tracker useful while keeping calculations and source attribution outside the language model. The assistant can resolve a user's description conversationally and the server can calculate an editable, traceable food record. [USDA API guide](https://fdc.nal.usda.gov/api-guide/).
+FoodData Central supplies generic food records with preparation distinctions, nutrient values and portion weights. It lets the server calculate editable, traceable records while Gemini handles the conversation. This separation avoids relying on generated calorie estimates. See the [USDA API guide](https://fdc.nal.usda.gov/api-guide/).
 
 ## Validation
 
 ```sh
-npm run format # Format TypeScript, JSX, CSS, scripts and tests with two-space indentation.
 npm run format:check
 npm test
 npm run lint
 npx tsc --noEmit
 npm run build -- --webpack
-node scripts/smoke-api.mjs # With the dev server running; creates isolated test guest records.
-node scripts/test-supabase.mjs # Live Auth/RLS/RPC checks using two new test users.
+# With the development server running and keys configured:
+node scripts/smoke-api.mjs
+node scripts/test-supabase.mjs
 ```
 
-66 automated cases cover nutrition workflows, audio/animation behavior and session bootstrap, including acknowledgment playback during a slow tool and ordered asynchronous actions with truthful failure results. Calendar cases cover month/year boundaries, leap days and daylight-saving changes. Regression cases include changing a draft's food search, adding to historical meals, keeping timezone settings during undo, rejecting malformed USDA conversions, requiring explicit confirmation before replacing a usual meal and preserving newer manual changes when a voice response arrives late. API smoke checks live USDA resolution, exact quantity correction, undo, memory, retries, stale updates, user isolation and origin checks. Supabase checks cover legacy import ownership, private records, concurrent commits, retry handling, request limits and forged-cookie rejection. Local SQLite checks cover persistence, competing edits, retries and the import bridge. Test scripts create isolated fixture accounts/records. The API script prints per-command latency. Voice-to-commit success rates and resolution accuracy need a repeated live evaluation set; the 10-second logging target is not yet measured or achieved.
+`npm run format` formats application code, scripts, tests and root configuration; Markdown is checked separately with `npx prettier --check README.md docs/*.md`.
 
-## Next increments / deployment
+The current suite has **66 tests**, including 46 nutrition workflow cases, calendar/timezone handling, local storage, session bootstrap, captions, speech/playback stability, ordered tools, acknowledgment playback and stale-response protection. These exercise code/state behavior with fixtures; they are not 66 measured AI conversations. The API smoke script exercises live USDA lookup and app mutations and prints request timings. The Supabase script creates two anonymous users to test RLS, RPC retries/conflicts, import ownership, request limits and forged-cookie rejection. Both default to `http://127.0.0.1:3001`; `SARJY_TEST_URL` overrides the app URL. They leave isolated fixture accounts/records and do not clean them up automatically.
 
-Production uses Supabase and needs its two public settings, `USDA_API_KEY` and `GEMINI_API_KEY`. The deployment does not need `SUPABASE_ACCESS_TOKEN`; keep that management token local. Label uploads and user-defined foods are future work. Use HTTPS for microphone access. Before public anonymous signup, configure abuse protection (Supabase recommends CAPTCHA/Turnstile); current per-user limits protect commands and Gemini token creation but do not prevent mass signup.
+Prior cleanup validation included both live scripts, a real Gemini typed reply and desktop/mobile browser checks. Voice-to-first-audio, end-to-end voice logging latency, food-match accuracy and long-session reliability have not been systematically measured. The earlier under-10-second logging goal is an unmeasured target.
 
-The daily dashboard gives Sarjy the left half of the overview, with energy, nutrients and recent meals on the right; the full diary sits below. On mobile, Sarjy comes first. Opening a conversation expands the same mounted companion into a focused view using Motion layout animation. Pauses do not switch views; Back to my day preserves the session, while End conversation closes it. Keyboard focus stays inside the expanded view, Escape returns to the dashboard, and reduced-motion preferences disable the expansion animation. Saved nutrition changes appear as confirmation cards with Undo when available.
+## Deployment and remaining scope
 
-Conversation captions currently last for the active browser page/session; logged food, preferences, saved meals and pending workflows persist in the database. Labels/photo extraction, meal-image estimation, medical advice, weight tracking and unsolicited coaching are outside this increment. No label upload is implemented.
+Vercel must use the Next.js framework and have the four runtime settings above in the intended environment: Gemini, USDA and the two public Supabase settings. Apply the database setup separately, then rebuild after changing environment values. HTTPS supports browser microphone access.
 
-See [demo walkthrough](docs/DEMO.md) and [full product specification](docs/SARJY-FIT-SPEC.md).
+[Branch preview](https://sarjy-git-codex-sarjy-fit-usajjad123s-projects.vercel.app/): on 2026-10-10, Vercel reported cleanup commit `e93c61e` as READY, but an unauthenticated request redirected to Vercel login. Reviewer access without special setup still requires an accessible deployment/protection configuration. Build readiness alone does not verify live voice functionality.
+
+Before opening anonymous signup publicly, configure signup abuse protection; per-user action/token limits do not stop mass account creation. Signup/login recovery, full conversation persistence, custom foods, nutrition-label uploads/extraction, meal-photo estimation, weight/fitness tracking, unsolicited coaching and a normalized long-history database are outside the current implementation.
+
+See the [demo walkthrough](docs/DEMO.md) and [implemented product/workflow contract](docs/SARJY-FIT-SPEC.md).

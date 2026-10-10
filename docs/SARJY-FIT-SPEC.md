@@ -1,459 +1,132 @@
-# Sarjy Fit — Voice-First AI Nutrition Tracker
+# Sarjy Fit — Implemented product and workflow contract
 
-## 1. Product Overview
+**Eat normally. Track effortlessly.** A voice-first nutrition tracker built around Log → Correct → Undo → Remember. Primary assignment deep dive: **Multistep Workflows**. The reactive avatar/dashboard supports that workflow.
 
-Build **Sarjy Fit**, a voice-first AI nutrition tracker that eliminates the friction of traditional calorie-tracking apps.
+This document describes the implemented behavior after the dashboard and code cleanup. It replaces the earlier aspirational plan. [README](../README.md) owns setup, verification commands and deployment status; [DEMO](DEMO.md) owns the presentation walkthrough.
 
-**Core philosophy:** Users should track food as easily as telling someone what they ate.
+## Product behavior
 
-Traditional apps require searching foods, selecting quantities, navigating forms, and repeating these steps daily. Sarjy Fit replaces most of this with natural conversation, persistent memory, and automatic nutritional calculations.
+Users can speak, type or use forms to manage meals. Gemini handles language/food-reference interpretation and proposes tool calls; the server validates commands, calculates nutrition and saves the authoritative workspace. Success is based on completed saves, not the assistant's verbal claim.
 
-The application is being developed as a take-home assignment for Sarj AI, a Saudi Voice AI startup.
+The current nutrition scope is calories, protein, carbohydrates and fat. Default daily targets are 2,000 kcal, 120 g protein, 250 g carbs and 65 g fat; these are examples until the user configures targets. The assistant is instructed to be concise, passive by default and free of unsolicited diet judgment or medical claims. These are prompt policies, not an independently tested jailbreak-protection layer.
 
-### Product principles
-- **Voice-first, not voice-only:** Voice is the primary interface, but text and manual editing remain available.
-- **Passive by default:** Log food without unsolicited advice or judgment.
-- **Accuracy over invented precision:** Use verified nutritional data, not LLM-generated calorie estimates.
-- **Minimal friction:** Ask clarifying questions only when ambiguity materially affects accuracy.
-- **Memory-driven:** Remember products, usual meals, serving sizes, and preferences.
-- **Transparent:** Show nutritional sources, estimates, and editable records.
-- **Responsive:** UI updates immediately after successful operations.
+| Area          | Implemented behavior                                                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview      | Sarjy left; selected day's energy/macros/recent meals right; full diary below. Sarjy first on mobile.                                                                                                      |
+| Conversation  | Same mounted companion expands using Motion; explicit open/close state prevents pauses from switching views. Back/Escape preserves session and mic state; End disconnects.                                 |
+| Accessibility | Shared modal focus trap/restoration, background inert state, Escape, scroll locking and reduced-motion expansion. Custom calendar has keyboard navigation.                                                 |
+| Diary         | Initially collapsed meal cards show food count and all four nutrient totals; expanded content shows food portions, source links, edit/remove and save-meal controls.                                       |
+| Dates         | Day arrows and central calendar with month controls/record markers. Manual logging uses selected date. Voice resolves dates from saved timezone/today or the request, independently of calendar selection. |
+| Draft         | One persisted multi-food draft, candidate choices, quantity validation, previews, manual commit/cancel. Incomplete drafts never count as intake.                                                           |
+| Library       | Confirmed USDA foods collected on commit; saved meals can be logged/forgotten. Reusing foods through voice avoids lookup. No custom-food authoring.                                                        |
+| Memory        | Explicit key/value facts, editable by replacing the same key and forgettable in UI/chat; goals and timezone have dedicated settings. No automatic conversation summaries/highlights.                       |
+| Export        | Complete workspace downloaded as JSON. No JSON import.                                                                                                                                                     |
 
-**Product tagline:** Eat normally. Track effortlessly.
+## Response, clarification and action
 
----
+The Gemini system instruction distinguishes three behaviors:
 
-## 2. Core User Experience
+1. **Respond:** ordinary conversation and known preferences can be answered directly. Read fresh authoritative context before intake totals, edits, undo and recalling meals. Refresh personal facts quietly only when needed; do not narrate memory retrieval.
+2. **Clarify:** ask one focused question when preparation, amount, portion size, date or reference materially changes correctness. For an intake request, first persist known details in a draft; unknown quantities remain missing.
+3. **Act:** call structured tools for requested changes. For food actions, speak a short acknowledgment while work runs, then confirm after the relevant successful result. Never invent nutrient values, IDs or conversion weights.
 
-The application is a **nutrition dashboard controlled through natural conversation**, not a traditional chatbot.
+These choices and matching decisions are LLM behavior guided by context/instructions. Deterministic checks enforce valid state transitions, quantities, candidate IDs and save consistency; they cannot guarantee that natural language was interpreted correctly.
 
-### Example conversation
-
-User: "I ate 200 grams of chicken breast, 150 grams of cooked rice, and 5ml of olive oil."
-
-Sarjy:
-- Identifies three foods and their quantities.
-- Resolves nutritional data from an external API or saved food library.
-- Calculates calories, protein, carbohydrates, and fat.
-- Saves the meal.
-- Immediately updates the dashboard.
-- Briefly confirms the result by voice.
-
-User: "Actually, make the chicken 180 grams."
-
-Sarjy updates the existing entry rather than creating another.
-
-User: "Undo that."
-
-Sarjy restores the previous quantity.
-
-User: "How much protein have I eaten today?"
-
-Sarjy reads the actual database totals and answers accurately.
-
-User: "Remember this as my usual lunch."
-
-Sarjy saves a reusable meal definition.
-
-Next session:
-
-User: "Log my usual lunch."
-
-Sarjy retrieves and logs the saved meal without asking for every ingredient again.
-
-### Essential UI
-
-Build a polished, responsive interface containing:
-- Daily calorie progress against a configurable target.
-- Protein, carbohydrate, and fat progress.
-- Today's meals and individual foods.
-- Live voice conversation interface with listening/speaking states.
-- Real-time transcription/captions.
-- Editable food entries and quantities.
-- Saved foods and reusable meals.
-- Conversation history.
-- Visible assistant actions and error feedback.
-
-The dashboard should react to voice commands without requiring navigation through forms.
-
----
-
-## 3. Core Functional Requirements
-
-### A. Real-Time Voice Assistant
-
-Use **Gemini Live API** initially.
-
-Requirements:
-- Natural bidirectional voice interaction.
-- Low-latency streaming audio.
-- Interruption/barge-in support where supported.
-- Live transcription when available.
-- Structured tool calls for application actions.
-- Text input fallback.
-
-Design a lightweight provider abstraction for future AI providers, but implement only Gemini initially.
-
-### B. Conversational Food Logging
-
-Support:
-- Multiple foods in a single utterance.
-- Quantities in grams, milliliters, pieces, servings, etc.
-- Preparation distinctions (raw/cooked/boiled/fried).
-- Natural-language corrections.
-- Adding/removing foods from existing meals.
-- Logging meals for previous dates.
-- References such as "same as yesterday."
-- Undo operations.
-- Questions about daily intake and remaining targets.
-
-Use a structured workflow:
-
-`Speech → Intent Extraction → Food Resolution → Validation → Calculation → Database Mutation → UI Update → Voice Confirmation`
-
-Never treat an LLM's verbal confirmation as proof that an operation succeeded.
-
-### C. Nutrition Data Integration
-
-Use **USDA FoodData Central** as the initial external API.
-
-It provides nutritional data for generic foods such as chicken, eggs, and rice.
-
-The LLM interprets user intent but **does not invent nutritional values or perform authoritative calculations**.
-
-A deterministic nutrition engine handles:
-- Unit normalization.
-- Portion conversions.
-- Per-100g calculations.
-- Calorie and macronutrient totals.
-- Daily aggregations.
-
-Preserve source references and distinguish raw versus cooked foods.
-
-When quantities or food matches are ambiguous, ask focused clarification questions or explicitly label provisional estimates.
-
-### D. Persistent Memory
-
-Implement two types of memory.
-
-**Personal memory:**
-- Nutritional goals and targets.
-- Dietary preferences.
-- Preferred units.
-- Usual portion sizes.
-- Common food choices.
-
-**Food memory:**
-- Previously confirmed products.
-- Saved meals and recipes.
-- Alternative names/aliases.
-- Frequently consumed foods.
-
-Examples:
-- "Remember that I usually eat 150g of Greek yogurt."
-- "Save this as my usual breakfast."
-- "I've changed my protein goal to 160g."
-- "Forget my old breakfast."
-
-Memories must persist across sessions.
-
-Saved meal definitions can change, but historical food logs must preserve their original nutritional snapshots.
-
-Users should be able to inspect, edit, and delete saved memories.
-
-### E. Nutrition Label Uploads (Phase 2)
-
-**Important: Do NOT implement food-photo calorie estimation or meal-image recognition.**
-
-Image uploads are exclusively for extracting information from photographed nutrition facts labels and ingredient lists.
-
-Workflow:
-
-1. User uploads a nutrition-label photo.
-2. Multimodal AI extracts product information, calories, macros, serving size, and units.
-3. Normalize values carefully, distinguishing per-serving and per-100g information.
-4. Display extracted values for user verification.
-5. Save the confirmed product in the user's personal food library.
-6. Allow future voice logging using the saved product.
-
-Example:
-
-User uploads a Greek yogurt label.
-
-Sarjy: "I found 120 calories and 10g protein per 100g. Save this product?"
-
-User: "Yes, and remember I usually eat 150g."
-
-Later: "Log my usual yogurt."
-
-The application calculates nutrients using the confirmed saved data.
-
-Preserve the original label image and extraction provenance.
-
-### F. Smart Nutrition Companion (Later)
-
-Support optional questions such as:
-- "What can I eat to reach my protein goal?"
-- "Suggest a higher-fiber alternative."
-- "How can I reduce calories in this meal?"
-- "What foods contributed most to my protein today?"
-
-Advice must be user-initiated, practical, and grounded in available data.
-
-No unsolicited food criticism or medical claims.
-
----
-
-## 4. Technical Architecture
-
-### Preferred stack
-
-- **Frontend:** Next.js, React, TypeScript, Tailwind CSS, shadcn/ui.
-- **AI/Voice:** Gemini Live API.
-- **Backend:** Next.js server routes/services.
-- **Database:** PostgreSQL.
-- **ORM:** Drizzle or Prisma.
-- **Nutrition API:** USDA FoodData Central.
-- **Deployment:** Vercel and managed PostgreSQL.
-- **State:** React/Zustand as appropriate.
-
-Keep architecture modular without introducing unnecessary microservices, queues, Redis, or vector databases.
-
-### Main backend modules
+## Logging and recovery
 
 ```text
-src/
-  features/
-    voice/
-    conversation/
-    food/
-    nutrition/
-    food-logging/
-    memory/
-    meals/
-    dashboard/
-    labels/        # Phase 2
+Intake request → start_food_log
+  → search_food → resolve_food, or use_saved_food
+  → set_pending_quantity if clarification is needed
+  → commit_food_log → authoritative workspace → UI + voice confirmation
 ```
 
-Responsibilities:
+Only one draft can be active. It stores batch/item IDs, date, meal name, optional existing meal ID, food queries, candidates, selected food, quantity and validation issue. Tool dependencies must use returned IDs/results; the client queues tool execution, and the prompt tells Gemini to await dependent steps.
 
-**Voice Service:** Manages AI audio sessions and provider interactions.
+`commit_food_log` requires the active batch ID and every item to be resolved. It creates/adds to a meal atomically, snapshots food/portion/nutrients, registers confirmed foods, sets correction focus and records undo/batch metadata. Adding to an existing meal preserves that meal's date. A quantity correction uses `update_quantity` on the existing entry; draft corrections use `set_pending_quantity`. Removal uses `remove_entry`. Empty meals can remain after their last entry is removed and cannot be saved as reusable meals.
 
-**Conversation Engine:** Maintains conversational context, pending clarifications, and tool calls.
+Draft state survives reloads, unrelated questions and lookup failure. `cancel_pending` explicitly discards it. Canceling a network/tool request does not prove the database did not commit: reread before retrying. Stale writes get HTTP 409; clients refresh state and reconsider instead of silently overwriting. Older responses cannot replace newer UI state. There is no automatic Live-session resumption; an ended/error session requires a new connection.
 
-**Food Resolver:** Matches extracted food descriptions to saved products or external nutritional records.
+Undo restores the latest non-undone operation's before snapshot, clears the active draft and preserves the current timezone. Draft steps/cancellation and timezone changes are untracked. Intake edits, reusable-food/meal changes, goals and memory changes are tracked. Up to 20 operation records are retained. Historical nutrient snapshots stay unchanged when a saved definition is replaced or forgotten.
 
-**Nutrition Engine:** Performs deterministic calculations and unit conversions.
+## API and commands
 
-**Food Logging Service:** Executes validated, persistent food-log operations.
+| Endpoint                          | Behavior                                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/workspace?timezone=...` | Verify/create identity, load/initialize workspace, optionally set initial timezone at version 0. Returns workspace, storage kind and food-lookup status. |
+| `POST /api/food-action`           | Read nutrition context or execute a validated command; returns authoritative workspace/context. All user-requested nutrition/memory edits pass here.     |
+| `POST /api/realtime-token`        | Constrained, single-use main-session token plus config and saved context/workspace.                                                                      |
+| `POST /api/transcription-token`   | Constrained, single-use interim-transcription token and config. Shares the voice-token rate-limit scope.                                                 |
 
-**Memory Service:** Manages user preferences, saved products, and reusable meals.
+Mutation requests use the actual wire envelope:
 
-**Dashboard:** Displays authoritative server state and responds to successful mutations.
-
----
-
-## 5. Structured Commands
-
-AI proposes validated commands instead of directly modifying application state.
-
-Example:
-
-```typescript
-type FoodCommand =
-  | {
-      type: "ADD_FOOD";
-      mealId: string;
-      foodId: string;
-      grams: number;
-    }
-  | {
-      type: "UPDATE_QUANTITY";
-      entryId: string;
-      grams: number;
-    }
-  | {
-      type: "REMOVE_FOOD";
-      entryId: string;
-    }
-  | {
-      type: "UNDO";
-      operationId: string;
-    };
+```json
+{
+  "name": "update_quantity",
+  "args": {
+    "entryId": "<saved-entry-id>",
+    "quantity": { "amount": 180, "unit": "g" }
+  },
+  "expectedVersion": 12,
+  "callId": "<unique-retry-id>"
+}
 ```
 
-Extend these commands for meal creation, saved meals, targets, and historical queries.
+`get_nutrition_context` needs only `name` and `args` (optional `date`). Other commands require an integer version and a call ID of 1–200 characters. An already-applied call ID returns current state before checking stale version. Responses may describe a persisted **draft**; HTTP success alone is not proof that intake was logged.
 
-Backend responsibilities:
-- Validate commands and ownership.
-- Prevent duplicate operations through idempotency.
-- Resolve references correctly.
-- Handle concurrent or interrupted operations.
-- Persist changes transactionally.
-- Return authoritative results.
-- Support undo where applicable.
+Exposed action names are:
 
-Never parse unstructured assistant messages to mutate the database.
+- Read: `get_nutrition_context`.
+- Draft: `start_food_log`, `search_food`, `resolve_food`, `use_saved_food`, `set_pending_quantity`, `commit_food_log`, `cancel_pending`.
+- Intake: `update_quantity`, `remove_entry`, `undo`.
+- Reuse: `save_meal`, `log_saved_meal`, `copy_meal`, `forget_saved_meal`, `forget_food`.
+- Settings/memory: `set_goals`, `set_timezone`, `remember_fact`, `forget_fact`.
 
----
+`set_timezone` is a UI/server command rather than a Gemini-declared tool. `set_candidates` is reducer-internal: the route derives it from USDA search results. Nutrient data for `resolve_food` comes from the server fetch; callers cannot submit their own numbers through the food-action API. The shared `Action` type is `{ name: string; args: Record<string, unknown> }`, validated at runtime.
 
-## 6. Conversational Reliability
+## Nutrition contract
 
-This is the **primary technical deep dive** for the assignment: **Multistep Workflows**.
+USDA search is restricted to SR Legacy and Foundation, up to eight candidates per query. Selected records retain provider, FDC ID, data type, source URL and fetch timestamp. Successful lookup results have a 24-hour process-local cache; requests time out after 12 seconds. Cache is not shared across deployed instances.
 
-The assistant must reliably handle conversational state.
+The normalizer requires valid kcal energy and gram values for protein/carbs/fat. Missing/malformed nutrients are rejected, including incorrect units; genuine recorded zero values are allowed. Calculations use `per100g × grams / 100`, aggregate unrounded values and round only for presentation.
 
-Important test scenarios:
+Quantities support `g`, `ml`, `piece` and `serving`, with amount and converted grams between 0.01 and 10,000. Grams need no portion. Other units require a matching verified USDA conversion; multiple choices need an exact portion ID. Eligible cup/tablespoon/teaspoon labels use US ml factors disclosed in the generated portion label. Invalid portion weights and heaped-volume conversions are excluded. Unsupported density never becomes `1 ml = 1 g`. Food preparation/matching remains an AI/user selection, not an algorithmic accuracy guarantee.
 
-| Input | Expected behavior |
-|---|---|
-| "I ate three eggs." | Add three eggs |
-| "Actually, two." | Update existing quantity |
-| "Add a banana." | Add banana to relevant meal |
-| "Remove the banana." | Remove correct entry |
-| "Undo that." | Restore last operation |
-| "Same breakfast as yesterday." | Retrieve and log previous breakfast |
-| "I ate this last night." | Associate with correct date |
-| User repeats a command after interruption | Avoid duplicate writes |
-| User asks unrelated question mid-workflow | Preserve pending workflow |
-| Nutrition API fails | Explain failure; never fabricate verified values |
+## Identity, storage and state
 
-Use explicit state for pending clarifications and persist important workflow state.
+Supabase Auth creates a real anonymous authenticated user with verified HttpOnly cookies. There is no signup/login UI, email flow or account linking. The same browser session can return to its data; clearing cookies or using another device has no recovery path. Local-only development uses a UUID guest cookie and SQLite. Production refuses SQLite fallback. The empty workspace defaults to `Asia/Riyadh`; initial dashboard loading sets the browser timezone while version is 0. Later timezone changes preserve the original civil dates on historical meals.
 
-Support reliable recovery after errors, interruptions, and refreshes.
+`Workspace` contains `version`, `goals`, `goalsConfigured`, `timezone`, `meals`, `savedMeals`, confirmed `foods`, explicit `memories`, `focusMealId`, `focusEntryId`, `pending`, `operations`, `appliedCalls` and `committedBatches`. Each consumed entry snapshots its food, quantity, gram weight and calculated nutrients. User ownership belongs to the database row, rather than an editable workspace field. Full conversation messages are not part of this document.
 
----
+| Supabase object              | Purpose                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `sarjy_workspaces`           | One JSONB document/version/timestamp per Auth user.                                    |
+| `sarjy_rate_limits`          | Per-user/per-scope minute buckets shared across server instances.                      |
+| `sarjy_legacy_imports`       | One-time ownership of old local records; local source file is preserved.               |
+| `initialize_sarjy_workspace` | Initialize once; protect legacy-import ownership.                                      |
+| `commit_sarjy_workspace`     | Derive user from JWT, lock row, check retry/version and atomically save next document. |
+| `consume_sarjy_rate_limit`   | Enforce actions 120/minute and voice-token requests 12/minute per user.                |
 
-## 7. Data Model Guidelines
+RLS allows authenticated users to read only their workspace; direct table writes and unauthenticated RPC execution are denied. RPCs are callable by authenticated users for their own document. They enforce ownership, versions/retry IDs and basic document constraints; they do not independently validate the full nutrition schema. App-level limits/validation are consequently not a tamper-proof SQL-level nutrition contract. No service-role key, ORM, vector database, external queue or image storage is used.
 
-Core entities:
+The reducer limits each draft to 12 items, meals to 2,000, saved meals to 100, confirmed foods to 300 and memories to 50. It retains 200 command IDs and 200 committed batch IDs. Duplicate protection applies within these retained windows, not forever or across distinct newly spoken requests. Memory keys allow 60 characters and values 500; updates replace the normalized key. Saves have an 8,000,000-length guard (app JSON string length; Supabase RPC JSON text bytes). Large histories/undo snapshots can hit that guard before entity limits.
 
-- `User`
-- `UserPreferences`
-- `Conversation`
-- `ConversationMessage`
-- `Food`
-- `FoodNutrientProfile`
-- `FoodLog`
-- `Meal`
-- `SavedMeal`
-- `SavedMealIngredient`
-- `Memory`
-- `OperationLog`
-- `NutritionLabel` (Phase 2)
+POST handlers reject a provided Origin whose host differs from the request Host; this is not a requirement that every client supply Origin. User command JSON is limited to 30,000 characters. Rate limits apply to food-action requests and token creation, not every workspace read. They do not prevent mass anonymous signup or limit ongoing audio usage in an established session.
 
-Important decisions:
+## Voice, audio and captions
 
-- Food definitions and actual consumption records are separate.
-- Historical logs store immutable nutrient snapshots.
-- Saved recipes can be modified without changing old logs.
-- User data and memories are isolated.
-- Every nutrient record retains its source.
-- Track operation IDs for idempotency and undo.
-- Associate consumed foods with the user's local date/timezone.
+The configured main model is `gemini-3.8-live`, with audio responses plus input/output transcription. A single-use token must start a new session within one minute and expires after 30 minutes. Interim input uses `gemini-3.5-transcribe-live`, with the same start window and a 10-minute token expiry. These are token constraints, not measured/guaranteed WebSocket durations.
 
----
+`GeminiLiveProvider` captures microphone audio through the required browser-loaded `public/audio-processor.js` AudioWorklet (1,024 Float32 samples per batch), converts it to PCM16/base64 and sends it to the main and optional transcription sessions. Input requests a 16 kHz AudioContext and uses its actual sample rate; output plays 24 kHz PCM. Main-model interruption messages stop queued playback. Local speech hysteresis stabilizes user visual activity without gating mic data. Assistant visual activity follows queued playback/turn state so silent packets do not restart the avatar.
 
-## 8. Product Scope and Priorities
+The optional transcriber runs only while the microphone is enabled; failure closes it and shows delayed-caption fallback. Interim hypotheses replace prior text and do not enter conversation history or mutate food records. Main-model transcription supplies the conversation transcript. Assistant caption chunks accumulate per turn. Captions are plain text; estimated word highlighting and playback timing estimates were removed.
 
-### Phase 1 — Assignment MVP
+Tools are declared `NON_BLOCKING` and results use `WHEN_IDLE`; audio may play while requests run. The client serializes requests, checks generation/cancellation and uses session/tool IDs for retry keys. UI writes update live context without requiring an assistant reply. A successful result determines saved state; spoken acknowledgment does not.
 
-Implement completely:
+## Implemented scope and validation limits
 
-1. Real-time Gemini voice conversation.
-2. Natural-language multi-food logging.
-3. USDA nutrition API integration.
-4. Deterministic nutritional calculations.
-5. Persistent PostgreSQL food logs.
-6. Responsive calories/macros dashboard.
-7. Natural-language corrections and undo.
-8. Cross-session user memory.
-9. Saved foods and reusable meals.
-10. Publicly accessible deployment.
+The current 66 automated tests include 46 nutrition cases and coverage for calendar dates, SQLite, workspace bootstrap, transcription and speech/playback/tool state. Live USDA/app and Supabase/Auth/RLS scripts exist separately. Test fixtures are not measured natural-language conversations. Detailed commands and previously completed live/browser checks are in the README.
 
-### Phase 2 — Product Expansion
+Not implemented: signup/login/recovery, full conversation persistence or automatic highlights, custom/packaged-food authoring, nutrition-label upload/extraction, meal-photo estimation, weight/fitness tracking, automated coaching and normalized long-history storage. No generic voice-provider abstraction remains; only Gemini is implemented.
 
-- Nutrition-label photo extraction.
-- Personal packaged-food library.
-- Editable label verification.
-- More advanced meal aliases and portions.
-- Improved conversational context.
-
-### Phase 3 — Intelligence
-
-- Personalized meal alternatives.
-- Protein/fiber recommendations.
-- Weekly nutrition insights.
-- Optional weight and fitness progress tracking.
-
-Do not sacrifice Phase 1 reliability to implement Phase 2 or 3.
-
----
-
-## 9. Success Criteria
-
-Target metrics:
-
-- Straightforward meal logging in under 10 seconds.
-- One voice utterance for complete, unambiguous meals.
-- Correct handling of multi-food commands.
-- Reliable edit, remove, and undo operations.
-- No duplicate food logging on retried commands.
-- Cross-session persistence.
-- Deterministic calculations matching selected nutrition records.
-- Transparent handling of missing nutritional information.
-- Stable, publicly accessible deployment.
-
-Create automated tests for at least 30 representative conversational scenarios.
-
-Measure workflow success, food-resolution accuracy, clarification frequency, and latency.
-
----
-
-## 10. Sarj Assignment Presentation
-
-The assignment requires:
-1. Working voice assistant.
-2. Cross-session memory.
-3. At least one useful external API.
-4. Public deployment.
-5. One technical deep dive.
-
-**Chosen deep dive: Multistep Workflows.**
-
-Demo sequence:
-
-1. Log several foods in one voice command.
-2. Observe dashboard updating.
-3. Correct a quantity.
-4. Remove an item.
-5. Undo the removal.
-6. Save the meal as a reusable favorite.
-7. Reload and log the saved meal through voice.
-8. Ask for daily protein/calorie totals.
-9. Demonstrate recovery from ambiguous input or failed operations.
-
-Explain the conversational state machine, structured commands, food resolution, deterministic nutrition calculations, and database consistency.
-
-**Engineering emphasis:** This is not simply a chatbot connected to a calorie database. It is a reliable conversational interface for managing structured nutritional data.
-
----
-
-## 11. Development Instructions
-
-Start with a clean, extensible architecture.
-
-Prioritize:
-1. Correct data models and application boundaries.
-2. Deterministic nutrition calculations.
-3. Reliable structured command execution.
-4. Persistent memory and food logging.
-5. Gemini Live voice integration.
-6. Reactive dashboard and polished UX.
-7. Automated testing and deployment.
-
-Avoid premature abstractions and excessive infrastructure.
-
-Build the smallest functional end-to-end experience first, then improve it incrementally.
-
-**Final goal:** Deliver a polished, production-minded voice-first nutrition tracker where users can log, correct, remember, and understand their food intake through natural conversation with minimal effort.
+Still to measure/verify: repeated voice workflow success, food-match accuracy, clarification frequency, first-audio/end-to-end latency, long-session reliability and unrestricted reviewer access. Under-10-second meal logging remains an unmeasured target. Label functionality is deferred and no storage migration is included. Future scope is not a claim of shipped behavior.
