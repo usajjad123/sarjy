@@ -1,0 +1,265 @@
+.dateNavigation {
+  position: relative;
+  flex-shrink: 0;
+  color: var(--fit-green, #344f3c);
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #e2e7db;
+  border-radius: 18px;
+  box-shadow: 0 2px 4px #344f3c03;
+}
+.dayArrow,
+.monthControls button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 38px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #71816a;
+  cursor: pointer;
+  transition:
+    background 150ms,
+    color 150ms;
+}
+.dayArrow:hover,
+.monthControls button:hover {
+  background: #eff3e8;
+  color: #344f3c;
+}
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-width: 140px;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.trigger > span {
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+.trigger strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+.trigger small {
+  font-size: 10px;
+  color: #839178;
+}
+.trigger > svg {
+  width: 12px;
+  color: #8b9b80;
+  transition: transform 150ms;
+}
+.trigger[aria-expanded="true"] {
+  background: #f2f5ec;
+}
+.trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.dateNavigation button:focus-visible {
+  outline: 2px solid #779955;
+  outline-offset: 2px;
+}
+.dateNavigation button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.calendar {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 310px;
+  padding: 20px;
+  background: #fffefa;
+  border: 1px solid #e3e8d9;
+  border-radius: 24px;
+  box-shadow:
+    0 16px 50px #344f3c18,
+    0 3px 12px #344f3c08;
+  animation: arrive 140ms ease-out;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.4px;
+  color: #92a180;
+}
+.heading h2 {
+  margin: 6px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.6px;
+  font-weight: 500;
+  color: #354a31;
+}
+.monthControls {
+  display: flex;
+  gap: 2px;
+}
+.monthControls button {
+  width: 30px;
+  height: 32px;
+}
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.weekday {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: #98a18e;
+  padding: 0 0 10px;
+}
+.week [role="gridcell"] {
+  min-width: 0;
+}
+.week [data-date] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 36px;
+  margin: 2px 0;
+  padding: 4px 0 2px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: #55634d;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.week [data-date]:hover {
+  background: #edf2e4;
+}
+.week [data-outside="true"] {
+  color: #c2c8b8;
+}
+.week [data-today="true"] {
+  border-color: #a8bc8c;
+  color: #526e3f;
+}
+.week [data-selected="true"],
+.week [data-selected="true"]:hover {
+  background: #344f3c;
+  color: #fff;
+  border-color: #344f3c;
+  box-shadow: 0 3px 6px #344f3c16;
+}
+.week i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: transparent;
+}
+.week i.hasMeals {
+  background: #9eb679;
+}
+.week [data-selected="true"] i.hasMeals {
+  background: #dce9b9;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0e5;
+}
+.footer > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #949f89;
+  font-size: 9px;
+}
+.footer i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #9eb679;
+}
+.footer button {
+  border: 0;
+  padding: 6px 0;
+  background: none;
+  font-size: 10px;
+  font-weight: 500;
+  color: #526d42;
+  cursor: pointer;
+}
+.footer button > span {
+  margin-left: 8px;
+}
+.close {
+  display: block;
+  margin: 10px auto -7px;
+  border: 0;
+  background: none;
+  padding: 7px 15px;
+  font-size: 9px;
+  color: #98a28f;
+  cursor: pointer;
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 650px) {
+  .dateNavigation {
+    width: 100%;
+  }
+  .controls {
+    justify-content: space-between;
+    border-radius: 16px;
+  }
+  .trigger {
+    flex: 1;
+  }
+  .calendar {
+    width: min(310px, calc(100vw - 40px));
+    right: 0;
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar {
+    animation: none;
+  }
+  .dateNavigation button,
+  .trigger > svg {
+    transition: none;
+  }
+}

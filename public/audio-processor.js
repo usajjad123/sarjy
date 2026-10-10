@@ -1,17 +1,23 @@
+// Runs on the browser audio thread; sends microphone samples to the Gemini client.
 class AudioProcessor extends AudioWorkletProcessor {
-    process(inputs) {
-      const input = inputs[0];
-  
-      if (!input || !input[0]) {
-        return true;
-      }
-  
-      const samples = input[0];
-  
-      this.port.postMessage(samples);
-  
-      return true;
-    }
+  constructor() {
+    super();
+    this.buffer = new Float32Array(1024);
+    this.offset = 0;
   }
-  
-  registerProcessor("audio-processor", AudioProcessor);
+
+  process(inputs) {
+    const samples = inputs[0]?.[0];
+    if (!samples) return true;
+    for (const sample of samples) {
+      this.buffer[this.offset++] = sample;
+      if (this.offset === this.buffer.length) {
+        this.port.postMessage(this.buffer);
+        this.offset = 0;
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor("audio-processor", AudioProcessor);

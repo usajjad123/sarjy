@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.data/
+.git/
+coverage/
+package-lock.json
+next-env.d.ts
+.env*
+public/*.png
+public/*.webp
+public/*.ico
