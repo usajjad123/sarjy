@@ -1,0 +1,149 @@
+.card {
+  container-type: inline-size;
+  background: #fff;
+  border: 1px solid var(--fit-line);
+  border-radius: 20px;
+  margin-bottom: 17px;
+  overflow: hidden;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.18s;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:hover {
+  background: #fafcf6;
+}
+
+.summary:focus-visible {
+  outline: 2px solid #5b865b;
+  outline-offset: -3px;
+  border-radius: 19px;
+}
+
+.symbol {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #f4efdf;
+  color: #b3a16e;
+  font-size: 21px;
+}
+
+.identity {
+  min-width: 0;
+}
+
+.identity h3 {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+
+.identity p {
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--fit-muted);
+}
+
+.nutrients {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 20px;
+  margin: 0;
+}
+
+.nutrients dt {
+  color: var(--fit-muted);
+  font-size: 9px;
+  margin-bottom: 6px;
+}
+
+.nutrients dd {
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nutrients small {
+  font-size: 9px;
+  color: var(--fit-muted);
+}
+
+.nutrients > div:first-child dd {
+  font-weight: 550;
+}
+
+.chevron {
+  color: #8a9b7c;
+  transition: transform 0.2s;
+}
+
+.card[open] .chevron {
+  transform: rotate(180deg);
+}
+
+.content {
+  border-top: 1px solid #edf0e7;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px 0;
+}
+
+.actions button {
+  font-size: 10px;
+}
+
+@container (max-width: 620px) {
+  .summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .chevron {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .nutrients {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid #edf0e7;
+  }
+
+  .nutrients dd {
+    font-size: 13px;
+  }
+
+  .actions {
+    padding-right: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary,
+  .chevron {
+    transition: none;
+  }
+}

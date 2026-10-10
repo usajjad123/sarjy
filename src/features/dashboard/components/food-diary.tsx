@@ -1,8 +1,7 @@
 import type { Entry, Meal } from "@/features/food-logging/model";
 import { context } from "@/features/food-logging/model";
-import { sum } from "@/features/nutrition/engine";
-import { formatNumber, formatQuantity } from "../format";
 import type { FoodAction } from "../types";
+import { MealCard } from "./meal-card";
 export function FoodDiary({
   summary,
   isToday,
@@ -60,76 +59,14 @@ export function FoodDiary({
         </div>
       ) : (
         summary.meals.map((meal) => (
-          <article className="meal-card" key={meal.id}>
-            <div className="meal-heading">
-              <div className="meal-symbol" aria-hidden="true">
-                {meal.name.toLowerCase().includes("break")
-                  ? "☀"
-                  : meal.name.toLowerCase().includes("dinner")
-                    ? "☾"
-                    : "◒"}
-              </div>
-              <div>
-                <h3>{meal.name}</h3>
-                <span>
-                  {meal.entries.length} foods ·{" "}
-                  {formatNumber(sum(meal.entries.map((entry) => entry.nutrients)).calories)} kcal
-                </span>
-              </div>
-              <button
-                className="text-button"
-                disabled={!meal.entries.length}
-                onClick={() => onSave(meal)}
-              >
-                Remember meal ♡
-              </button>
-            </div>
-            <div className="food-table">
-              <div className="food-table-head">
-                <span>Food & portion</span>
-                <span>Calories</span>
-                <span>Protein</span>
-                <span />
-              </div>
-              {meal.entries.map((entry) => (
-                <div className="food-row" key={entry.id}>
-                  <div>
-                    <strong>{entry.food.name}</strong>
-                    <p>{formatQuantity(entry)}</p>
-                    <a href={entry.food.source.url} target="_blank" rel="noreferrer">
-                      USDA · {entry.food.source.fdcId} ↗
-                    </a>
-                  </div>
-                  <span>
-                    {formatNumber(entry.nutrients.calories)}
-                    <small> kcal</small>
-                  </span>
-                  <span>
-                    {formatNumber(entry.nutrients.protein)}
-                    <small> g</small>
-                  </span>
-                  <div className="row-actions">
-                    <button
-                      aria-label={`Edit ${entry.food.name}`}
-                      title="Edit quantity"
-                      disabled={!!busy}
-                      onClick={() => onEdit(entry)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      aria-label={`Remove ${entry.food.name}`}
-                      title="Remove food"
-                      disabled={!!busy}
-                      onClick={() => runAction("remove_entry", { entryId: entry.id })}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
+          <MealCard
+            key={meal.id}
+            meal={meal}
+            busy={busy}
+            runAction={runAction}
+            onEdit={onEdit}
+            onSave={onSave}
+          />
         ))
       )}
     </section>

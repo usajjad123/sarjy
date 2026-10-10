@@ -510,45 +510,6 @@ select:focus-visible {
 .diary-empty .text-button > span {
   margin-left: 15px;
 }
-.meal-card {
-  background: white;
-  border: 1px solid var(--fit-line);
-  border-radius: 20px;
-  margin-bottom: 17px;
-  overflow: hidden;
-}
-.meal-heading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 21px;
-  border-bottom: 1px solid #edf0e7;
-}
-.meal-symbol {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  background: #f4efdf;
-  color: #b3a16e;
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-}
-.meal-heading h3 {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.2px;
-}
-.meal-heading span {
-  font-size: 9px;
-  color: #9ca78c;
-  display: block;
-  margin-top: 4px;
-}
-.meal-heading .text-button {
-  margin-left: auto;
-  font-size: 9px;
-}
 .food-table {
   padding: 0 20px;
 }
@@ -1418,9 +1379,6 @@ select:focus-visible {
   .food-table-head > span:nth-child(3) {
     display: none;
   }
-  .meal-heading .text-button {
-    font-size: 8px;
-  }
   .heading-actions {
     gap: 3px;
   }
@@ -1662,19 +1620,6 @@ select:focus-visible {
   }
   .food-table {
     padding: 0 14px;
-  }
-  .meal-heading {
-    padding: 16px 14px;
-    gap: 8px;
-  }
-  .meal-heading h3 {
-    font-size: 13px;
-  }
-  .meal-heading .text-button {
-    max-width: 90px;
-    white-space: normal;
-    text-align: right;
-    line-height: 1.6;
   }
   .food-table-head,
   .food-row {
