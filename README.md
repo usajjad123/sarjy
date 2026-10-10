@@ -58,7 +58,9 @@ FoodData Central provides authoritative generic food records with preparation di
 ## Validation
 
 ```sh
-node --test tests/*.test.mjs
+npm run format # Format TypeScript, JSX, CSS, scripts and tests with two-space indentation.
+npm run format:check
+npm test
 npm run lint
 npx tsc --noEmit
 npm run build -- --webpack
@@ -66,7 +68,7 @@ node scripts/smoke-api.mjs # With the dev server running; creates isolated test 
 node scripts/test-supabase.mjs # Live Auth/RLS/RPC/private-image checks using two new test users.
 ```
 
-40 representative deterministic workflow scenarios, 5 audio/animation tests and 2 session bootstrap regressions. API smoke checks live USDA resolution, exact quantity correction, undo, memory, retries, stale updates, user isolation and origin checks. Supabase checks cover legacy import ownership, concurrent commits, authenticated ownership of images and forged-cookie rejection. Test scripts create isolated fixture accounts/records; the image check removes only its own temporary image. The API script prints per-command latency. Voice-to-commit success rates and resolution accuracy need a repeated live evaluation set; the 10-second logging target is not yet measured or achieved.
+55 automated cases cover nutrition workflows, audio/animation behavior and session bootstrap. Regression cases include changing a draft's food search, adding to historical meals, keeping timezone settings during undo, rejecting malformed USDA conversions, requiring explicit confirmation before replacing a usual meal and preserving newer manual changes when a voice response arrives late. API smoke checks live USDA resolution, exact quantity correction, undo, memory, retries, stale updates, user isolation and origin checks. Supabase checks cover legacy import ownership, concurrent commits, authenticated ownership of images and forged-cookie rejection. Test scripts create isolated fixture accounts/records; the image check removes only its own temporary image. The API script prints per-command latency. Voice-to-commit success rates and resolution accuracy need a repeated live evaluation set; the 10-second logging target is not yet measured or achieved.
 
 ## Next increments / deployment
 

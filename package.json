@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "format": "prettier --write src scripts tests public/*.js *.json *.ts *.mjs",
+    "format:check": "prettier --check src scripts tests public/*.js *.json *.ts *.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.27.0",
@@ -28,6 +31,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "prettier": "^3.9.9",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

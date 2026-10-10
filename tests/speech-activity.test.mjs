@@ -3,9 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
-const source = readFileSync(new URL("../src/lib/realtime/speech-activity.ts", import.meta.url), "utf8");
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } });
-const { SpeechActivityDetector } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const source = readFileSync(
+  new URL("../src/lib/realtime/speech-activity.ts", import.meta.url),
+  "utf8",
+);
+const { outputText } = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext },
+});
+const { SpeechActivityDetector } = await import(
+  `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+);
 
 const startSpeaking = (detector) => {
   assert.equal(detector.update(0.2, 0), false);

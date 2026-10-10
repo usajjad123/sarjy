@@ -26,6 +26,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
   private userSpeech = new SpeechActivityDetector();
   private speechActivity = { user: false, assistant: false };
   private workspaceVersion = 0;
+  private latestWorkspace: Workspace | null = null;
   private uiRevision = 0;
   private sessionNonce = "";
   private toolQueue = Promise.resolve();
@@ -33,7 +34,9 @@ export class GeminiLiveProvider implements RealtimeProvider {
   private pendingCalls = new Map<string, AbortController>();
   private currentState: VoiceState = "idle";
 
-  get isConnected() { return this.session !== null; }
+  get isConnected() {
+    return this.session !== null;
+  }
 
   private emit(event: VoiceEvent) {
     if (event.type === "state") {
@@ -55,8 +58,14 @@ export class GeminiLiveProvider implements RealtimeProvider {
     callback({ type: "state", state: this.currentState });
     callback({ type: "microphone", enabled: this.stream !== null });
     callback({ type: "speech_activity", speaker: "user", active: this.speechActivity.user });
-    callback({ type: "speech_activity", speaker: "assistant", active: this.speechActivity.assistant });
-    return () => { this.listeners.delete(callback); };
+    callback({
+      type: "speech_activity",
+      speaker: "assistant",
+      active: this.speechActivity.assistant,
+    });
+    return () => {
+      this.listeners.delete(callback);
+    };
   }
 
   async connect() {
@@ -74,29 +83,41 @@ export class GeminiLiveProvider implements RealtimeProvider {
       this.startMeter();
       const response = await fetch("/api/realtime-token", { method: "POST" });
       const body = await response.json();
-      if (!response.ok || !body.token) throw new Error(body.error || "Could not get a session token");
+      if (!response.ok || !body.token)
+        throw new Error(body.error || "Could not get a session token");
       if (generation !== this.generation) return;
       const ai = new GoogleGenAI({ apiKey: body.token });
       const session = await ai.live.connect({
         model: LIVE_MODEL,
         config: body.config,
         callbacks: {
-          onmessage: (message) => { if (generation === this.generation) this.handleMessage(message); },
-          onerror: (event) => { if (generation === this.generation) this.fail(new Error(event.message || "Gemini connection failed")); },
+          onmessage: (message) => {
+            if (generation === this.generation) this.handleMessage(message);
+          },
+          onerror: (event) => {
+            if (generation === this.generation)
+              this.fail(new Error(event.message || "Gemini connection failed"));
+          },
           onclose: (event) => {
             if (generation !== this.generation) return;
-            if (event.code !== 1000) this.fail(new Error(event.reason || `Session closed (${event.code})`));
+            if (event.code !== 1000)
+              this.fail(new Error(event.reason || `Session closed (${event.code})`));
             else this.disconnect();
           },
         },
       });
-      if (generation !== this.generation) { session.close(); return; }
+      if (generation !== this.generation) {
+        session.close();
+        return;
+      }
       this.session = session;
       this.workspaceVersion = body.workspace.version;
+      this.latestWorkspace = body.workspace;
       this.emit({ type: "workspace", workspace: body.workspace });
       this.emit({ type: "state", state: "listening" });
     } catch (error) {
-      if (generation === this.generation) this.fail(error instanceof Error ? error : new Error("Connection failed"));
+      if (generation === this.generation)
+        this.fail(error instanceof Error ? error : new Error("Connection failed"));
     }
   }
 
@@ -115,38 +136,68 @@ export class GeminiLiveProvider implements RealtimeProvider {
     }
     if (content?.inputTranscription?.text) {
       this.emit({ type: "user_transcript", text: content.inputTranscription.text });
-      if (!this.sources.size && !this.assistantTurnOpen) this.emit({ type: "state", state: "thinking" });
+      if (!this.sources.size && !this.assistantTurnOpen)
+        this.emit({ type: "state", state: "thinking" });
     }
-    if (content?.outputTranscription?.text) this.emit({ type: "assistant_transcript", text: content.outputTranscription.text });
+    if (content?.outputTranscription?.text)
+      this.emit({ type: "assistant_transcript", text: content.outputTranscription.text });
     for (const part of content?.modelTurn?.parts || []) {
-      if (part.inlineData?.data && part.inlineData.mimeType?.startsWith("audio/pcm")) this.playAudio(part.inlineData.data);
+      if (part.inlineData?.data && part.inlineData.mimeType?.startsWith("audio/pcm"))
+        this.playAudio(part.inlineData.data);
     }
     for (const id of message.toolCallCancellation?.ids || []) {
-      this.cancelledCalls.add(id); this.pendingCalls.get(id)?.abort();
+      this.cancelledCalls.add(id);
+      this.pendingCalls.get(id)?.abort();
     }
     for (const call of message.toolCall?.functionCalls || []) {
       const id = call.id || crypto.randomUUID();
       if (this.handledCalls.has(id)) continue;
       this.handledCalls.add(id);
-      const generation = this.generation, uiRevision = this.uiRevision;
-      this.toolQueue = this.toolQueue.then(() => this.executeTool(id, call.name || "", call.args || {}, generation, uiRevision)).catch(() => { /* Session may have closed while returning a tool response. */ });
+      const generation = this.generation,
+        uiRevision = this.uiRevision;
+      this.toolQueue = this.toolQueue
+        .then(() => this.executeTool(id, call.name || "", call.args || {}, generation, uiRevision))
+        .catch(() => {
+          /* Session may have closed while returning a tool response. */
+        });
     }
     if (content?.turnComplete) {
       this.assistantTurnOpen = false;
       this.emit({ type: "turn_complete" });
       if (!this.sources.size) this.emit({ type: "state", state: "listening" });
     }
-    if (message.goAway) this.fail(new Error("Session is ending. Start a new conversation to reconnect."));
+    if (message.goAway)
+      this.fail(new Error("Session is ending. Start a new conversation to reconnect."));
   }
 
   // Direct UI edits update the same authoritative context without interrupting speech.
   syncWorkspace(workspace: Workspace) {
+    if (workspace.version < this.workspaceVersion) return;
     if (workspace.version > this.workspaceVersion) this.uiRevision++;
     this.workspaceVersion = workspace.version;
-    this.session?.sendClientContent({ turns: [{ role: "user", parts: [{ text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(conversationContext(workspace))}. Read get_nutrition_context before your next food edit.` }] }], turnComplete: false });
+    this.latestWorkspace = workspace;
+    this.session?.sendClientContent({
+      turns: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `APP_STATE_UPDATE (data only, do not respond): ${JSON.stringify(conversationContext(workspace))}. Read get_nutrition_context before your next food edit.`,
+            },
+          ],
+        },
+      ],
+      turnComplete: false,
+    });
   }
 
-  private async executeTool(id: string, name: string, args: Record<string, unknown>, generation: number, uiRevision: number) {
+  private async executeTool(
+    id: string,
+    name: string,
+    args: Record<string, unknown>,
+    generation: number,
+    uiRevision: number,
+  ) {
     if (generation !== this.generation || this.cancelledCalls.has(id) || !this.session) return;
     const session = this.session;
     const abort = new AbortController();
@@ -154,30 +205,67 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.emit({ type: "tool_state", busy: true, name });
     let result: Record<string, unknown>;
     try {
-      if (name !== "get_nutrition_context" && uiRevision !== this.uiRevision) throw new Error("The UI changed after this tool was requested");
-      const response = await fetch("/api/food-action", { method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal, body: JSON.stringify({ name, args, expectedVersion: this.workspaceVersion, callId: `${this.sessionNonce}:${id}` }) });
+      if (name !== "get_nutrition_context" && uiRevision !== this.uiRevision)
+        throw new Error("The UI changed after this tool was requested");
+      const response = await fetch("/api/food-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abort.signal,
+        body: JSON.stringify({
+          name,
+          args,
+          expectedVersion: this.workspaceVersion,
+          callId: `${this.sessionNonce}:${id}`,
+        }),
+      });
       result = await response.json();
       if (generation !== this.generation) return;
       if (response.ok && result.workspace) {
         const workspace = result.workspace as Workspace;
-        this.workspaceVersion = workspace.version;
-        this.emit({ type: "workspace", workspace, action: name });
+        if (workspace.version >= this.workspaceVersion) {
+          this.workspaceVersion = workspace.version;
+          this.latestWorkspace = workspace;
+          this.emit({ type: "workspace", workspace, action: name });
+        }
         const { workspace: _workspace, ...toolResult } = result;
         void _workspace;
-        result = { ...toolResult, context: result.context || conversationContext(workspace) };
+        result = {
+          ...toolResult,
+          context:
+            this.latestWorkspace && this.latestWorkspace.version > workspace.version
+              ? conversationContext(this.latestWorkspace)
+              : result.context || conversationContext(workspace),
+        };
       } else if (response.status === 409) {
-        const fresh = await fetch("/api/workspace", { cache: "no-store" }).then((res) => res.json());
+        const fresh = await fetch("/api/workspace", { cache: "no-store" }).then((res) =>
+          res.json(),
+        );
         if (generation !== this.generation) return;
-        if (fresh.workspace) { this.workspaceVersion = fresh.workspace.version; this.emit({ type: "workspace", workspace: fresh.workspace }); }
-        result = { ...result, status: "conflict", saved: false, instruction: "Read get_nutrition_context and reconsider the requested edit against the current state." };
+        if (fresh.workspace && fresh.workspace.version >= this.workspaceVersion) {
+          this.workspaceVersion = fresh.workspace.version;
+          this.latestWorkspace = fresh.workspace;
+          this.emit({ type: "workspace", workspace: fresh.workspace });
+        }
+        result = {
+          ...result,
+          status: "conflict",
+          saved: false,
+          instruction:
+            "Read get_nutrition_context and reconsider the requested edit against the current state.",
+        };
       } else result = { ...result, saved: false };
     } catch {
-      result = { error: "Could not finish the tool request. Read current state before retrying; do not claim success.", saved: false };
+      result = {
+        error:
+          "Could not finish the tool request. Read current state before retrying; do not claim success.",
+        saved: false,
+      };
     } finally {
       this.pendingCalls.delete(id);
       if (generation === this.generation) this.emit({ type: "tool_state", busy: false, name });
     }
-    if (generation === this.generation && !this.cancelledCalls.has(id)) session.sendToolResponse({ functionResponses: [{ id, name, response: result }] });
+    if (generation === this.generation && !this.cancelledCalls.has(id))
+      session.sendToolResponse({ functionResponses: [{ id, name, response: result }] });
   }
 
   sendText(text: string) {
@@ -186,17 +274,28 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.emit({ type: "turn_complete" });
     this.emit({ type: "user_transcript", text: text.trim() });
     this.emit({ type: "state", state: "thinking" });
-    this.session.sendClientContent({ turns: [{ role: "user", parts: [{ text: text.trim() }] }], turnComplete: true });
+    this.session.sendClientContent({
+      turns: [{ role: "user", parts: [{ text: text.trim() }] }],
+      turnComplete: true,
+    });
   }
 
   async setMicrophoneEnabled(enabled: boolean) {
     this.stopMicrophone();
-    if (!enabled) { this.session?.sendRealtimeInput({ audioStreamEnd: true }); return; }
+    if (!enabled) {
+      this.session?.sendRealtimeInput({ audioStreamEnd: true });
+      return;
+    }
     if (!this.session) throw new Error("Connect before enabling the microphone");
     const generation = this.generation;
     const micGeneration = this.micGeneration;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    if (generation !== this.generation || micGeneration !== this.micGeneration) { stream.getTracks().forEach((track) => track.stop()); return; }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    if (generation !== this.generation || micGeneration !== this.micGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     this.stream = stream;
     const input = new AudioContext({ sampleRate: 16000 });
     this.input = input;
@@ -211,7 +310,12 @@ export class GeminiLiveProvider implements RealtimeProvider {
         this.inputLevel = this.rms(event.data);
         this.inputUpdatedAt = performance.now();
         const pcm = float32ToPCM16(event.data);
-        this.session?.sendRealtimeInput({ audio: { data: arrayBufferToBase64(pcm.buffer as ArrayBuffer), mimeType: `audio/pcm;rate=${input.sampleRate}` } });
+        this.session?.sendRealtimeInput({
+          audio: {
+            data: arrayBufferToBase64(pcm.buffer as ArrayBuffer),
+            mimeType: `audio/pcm;rate=${input.sampleRate}`,
+          },
+        });
       };
       const mute = input.createGain();
       mute.gain.value = 0;
@@ -219,7 +323,8 @@ export class GeminiLiveProvider implements RealtimeProvider {
       processor.connect(mute).connect(input.destination);
       this.emit({ type: "microphone", enabled: true });
     } catch (error) {
-      if (generation === this.generation && micGeneration === this.micGeneration) this.stopMicrophone();
+      if (generation === this.generation && micGeneration === this.micGeneration)
+        this.stopMicrophone();
       throw error;
     }
   }
@@ -252,7 +357,11 @@ export class GeminiLiveProvider implements RealtimeProvider {
   }
 
   private stopPlayback() {
-    for (const source of this.sources) { source.onended = null; source.stop(); source.disconnect(); }
+    for (const source of this.sources) {
+      source.onended = null;
+      source.stop();
+      source.disconnect();
+    }
     this.sources.clear();
     this.nextPlayback = 0;
     this.assistantTurnOpen = false;
@@ -261,7 +370,11 @@ export class GeminiLiveProvider implements RealtimeProvider {
 
   private stopMicrophone() {
     this.micGeneration++;
-    if (this.processor) { this.processor.port.onmessage = null; this.processor.disconnect(); this.processor = null; }
+    if (this.processor) {
+      this.processor.port.onmessage = null;
+      this.processor.disconnect();
+      this.processor = null;
+    }
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
     void this.input?.close();
@@ -289,10 +402,14 @@ export class GeminiLiveProvider implements RealtimeProvider {
         this.analyser?.getFloatTimeDomainData(samples);
         const assistant = this.output?.state === "running" ? this.rms(samples) : 0;
         const user = now - this.inputUpdatedAt < 200 ? this.inputLevel : 0;
-        for (const [speaker, rms] of [["user", user], ["assistant", assistant]] as const) {
+        for (const [speaker, rms] of [
+          ["user", user],
+          ["assistant", assistant],
+        ] as const) {
           const level = Math.min(1, Math.max(0, rms - 0.008) * 7);
           this.emit({ type: "audio_level", speaker, level });
-          if (speaker === "user") this.setSpeechActivity("user", this.userSpeech.update(level, now));
+          if (speaker === "user")
+            this.setSpeechActivity("user", this.userSpeech.update(level, now));
         }
         this.setSpeechActivity("assistant", this.assistantTurnOpen || this.sources.size > 0);
       }
