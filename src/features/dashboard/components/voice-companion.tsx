@@ -3,6 +3,7 @@ import { VoiceParticipant } from "@/components/voice-participant";
 import type { SarjyVoice } from "../types";
 import { actionLabels as labels } from "../action-labels";
 import { Icon } from "./icon";
+import { LiveCaption } from "./live-caption";
 export function VoiceCompanion({
   voice,
   ready,
@@ -37,20 +38,11 @@ export function VoiceCompanion({
         thinking={voice.state === "thinking" || !!voice.tool}
         subtitle="A little help. A little less effort."
       />
-      <div className="companion-caption" aria-live="polite">
-        {visibleTool ? (
+      <div className="companion-caption" aria-live="off">
+        {visibleTool && !voice.speaking.user && !voice.speaking.assistant ? (
           <p className="working-caption">{labels[visibleTool] || "Updating your records"}…</p>
-        ) : latest ? (
-          <p>
-            <small>{latest.role === "user" ? "You" : "Sarjy"}</small>
-            {latest.text}
-          </p>
         ) : (
-          <p>
-            Food logging can feel like a chore.
-            <br />
-            Let’s make it a conversation.
-          </p>
+          <LiveCaption caption={voice.caption} fallback={latest} />
         )}
       </div>
       <div className="fit-voice-controls">
@@ -83,6 +75,7 @@ export function VoiceCompanion({
         <div className="user-activity" data-speaking={voice.speaking.user}>
           <span className="status-dot active" />
           {voice.speaking.user ? "You’re speaking" : "Listening · You can interrupt"}
+          {voice.captionStatus === "delayed" && " · Captions appear after your turn"}
         </div>
       )}
       <form className="fit-message-form" onSubmit={send}>

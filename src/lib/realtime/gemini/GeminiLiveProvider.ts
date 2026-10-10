@@ -8,7 +8,9 @@ import { arrayBufferToBase64, float32ToPCM16 } from "../audio";
 import { conversationContext, type Workspace } from "../../../features/food-logging/model";
 import { SpeechActivityDetector } from "../speech-activity";
 import type { RealtimeProvider } from "../provider";
-import type { VoiceEvent, VoiceState } from "../types";
+import type { VoiceCaption, VoiceEvent, VoiceState } from "../types";
+import { PlaybackCaptions, userCaption } from "../captions";
+import { LiveInputTranscriber } from "./LiveInputTranscriber";
 import { LIVE_MODEL } from "./config";
 
 export class GeminiLiveProvider implements RealtimeProvider {
@@ -38,6 +40,40 @@ export class GeminiLiveProvider implements RealtimeProvider {
   private cancelledCalls = new Set<string>();
   private pendingCalls = new Map<string, AbortController>();
   private currentState: VoiceState = "idle";
+  private playbackCaptions = new PlaybackCaptions();
+  private captionTurnOpen = false;
+  private caption: VoiceCaption | null = null;
+  private userTranscript = "";
+  private transcriber = new LiveInputTranscriber(
+    (text, interim) => this.showUserCaption(text, interim),
+    () => this.emit({ type: "caption_status", status: "delayed" }),
+  );
+
+  private showCaption(caption: VoiceCaption | null) {
+    if (JSON.stringify(caption) === JSON.stringify(this.caption)) return;
+    this.caption = caption;
+    this.emit({ type: "caption", caption });
+  }
+
+  private showUserCaption(text: string, interim: boolean) {
+    if (!this.speechActivity.assistant || this.speechActivity.user)
+      this.showCaption(userCaption(text, interim));
+  }
+
+  private beginCaptionTurn() {
+    if (this.captionTurnOpen) return;
+    this.playbackCaptions = new PlaybackCaptions();
+    this.captionTurnOpen = true;
+  }
+
+  private updatePlaybackCaption() {
+    if (this.speechActivity.user) return;
+    const caption = this.playbackCaptions.at(
+      this.output?.currentTime ?? 0,
+      !!this.sources.size && this.output?.state !== "suspended",
+    );
+    if (caption) this.showCaption(caption);
+  }
 
   get isConnected() {
     return this.session !== null;
@@ -55,6 +91,13 @@ export class GeminiLiveProvider implements RealtimeProvider {
     if (this.speechActivity[speaker] === active) return;
     this.speechActivity[speaker] = active;
     this.emit({ type: "speech_activity", speaker, active });
+    if (speaker === "user" && active) {
+      this.userTranscript = "";
+      this.transcriber.resetUtterance();
+      this.showCaption(userCaption("", true));
+    } else if (speaker === "user" && this.caption?.speaker === "user") {
+      this.showCaption({ ...this.caption, activeWord: -1 });
+    }
   }
 
   onEvent(callback: (event: VoiceEvent) => void) {
@@ -62,6 +105,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
     // A new subscriber (including after Fast Refresh) gets the actual session state.
     callback({ type: "state", state: this.currentState });
     callback({ type: "microphone", enabled: this.stream !== null });
+    callback({ type: "caption", caption: this.caption });
     callback({ type: "speech_activity", speaker: "user", active: this.speechActivity.user });
     callback({
       type: "speech_activity",
@@ -91,7 +135,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
       if (!response.ok || !body.token)
         throw new Error(body.error || "Could not get a session token");
       if (generation !== this.generation) return;
-      const ai = new GoogleGenAI({ apiKey: body.token });
+      const ai = new GoogleGenAI({ apiKey: body.token, httpOptions: { apiVersion: "v1alpha" } });
       const session = await ai.live.connect({
         model: LIVE_MODEL,
         config: body.config,
@@ -139,16 +183,24 @@ export class GeminiLiveProvider implements RealtimeProvider {
       this.emit({ type: "turn_complete" });
       this.emit({ type: "state", state: "listening" });
     }
+    if (content?.interimInputTranscription?.text)
+      this.showUserCaption(content.interimInputTranscription.text, true);
     if (content?.inputTranscription?.text) {
+      this.userTranscript += content.inputTranscription.text;
       this.emit({ type: "user_transcript", text: content.inputTranscription.text });
-      if (!this.sources.size && !this.assistantTurnOpen)
+      this.showUserCaption(this.userTranscript, false);
+      if (!this.sources.size && !this.assistantTurnOpen && !this.speechActivity.user)
         this.emit({ type: "state", state: "thinking" });
     }
-    if (content?.outputTranscription?.text)
-      this.emit({ type: "assistant_transcript", text: content.outputTranscription.text });
     for (const part of content?.modelTurn?.parts || []) {
       if (part.inlineData?.data && part.inlineData.mimeType?.startsWith("audio/pcm"))
         this.playAudio(part.inlineData.data);
+    }
+    if (content?.outputTranscription?.text) {
+      this.beginCaptionTurn();
+      this.playbackCaptions.append(content.outputTranscription.text);
+      this.emit({ type: "assistant_transcript", text: content.outputTranscription.text });
+      this.updatePlaybackCaption();
     }
     for (const id of message.toolCallCancellation?.ids || []) {
       this.cancelledCalls.add(id);
@@ -167,6 +219,9 @@ export class GeminiLiveProvider implements RealtimeProvider {
         });
     }
     if (content?.turnComplete) {
+      this.captionTurnOpen = false;
+      this.playbackCaptions.finish();
+      this.updatePlaybackCaption();
       this.assistantTurnOpen = false;
       this.emit({ type: "turn_complete" });
       if (!this.sources.size) this.emit({ type: "state", state: "listening" });
@@ -288,6 +343,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.stopPlayback();
     this.emit({ type: "turn_complete" });
     this.emit({ type: "user_transcript", text: text.trim() });
+    this.showCaption(userCaption(text.trim(), false));
     this.emit({ type: "state", state: "thinking" });
     this.session.sendClientContent({
       turns: [{ role: "user", parts: [{ text: text.trim() }] }],
@@ -315,6 +371,17 @@ export class GeminiLiveProvider implements RealtimeProvider {
     const input = new AudioContext({ sampleRate: 16000 });
     this.input = input;
     try {
+      try {
+        const captionsReady = await this.transcriber.connect();
+        if (generation !== this.generation || micGeneration !== this.micGeneration) {
+          return;
+        }
+        if (!captionsReady) throw new Error("Caption session closed before connecting");
+        this.emit({ type: "caption_status", status: "live" });
+      } catch {
+        if (generation !== this.generation || micGeneration !== this.micGeneration) return;
+        this.emit({ type: "caption_status", status: "delayed" });
+      }
       await input.audioWorklet.addModule("/audio-processor.js");
       await input.resume();
       if (generation !== this.generation || micGeneration !== this.micGeneration) return;
@@ -325,9 +392,11 @@ export class GeminiLiveProvider implements RealtimeProvider {
         this.inputLevel = this.rms(event.data);
         this.inputUpdatedAt = performance.now();
         const pcm = float32ToPCM16(event.data);
+        const data = arrayBufferToBase64(pcm.buffer as ArrayBuffer);
+        this.transcriber.sendAudio(data, input.sampleRate);
         this.session?.sendRealtimeInput({
           audio: {
-            data: arrayBufferToBase64(pcm.buffer as ArrayBuffer),
+            data,
             mimeType: `audio/pcm;rate=${input.sampleRate}`,
           },
         });
@@ -346,6 +415,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
 
   private playAudio(base64: string) {
     if (!this.output) return;
+    this.beginCaptionTurn();
     this.assistantTurnOpen = true;
     this.setSpeechActivity("assistant", true);
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
@@ -364,10 +434,13 @@ export class GeminiLiveProvider implements RealtimeProvider {
         this.setSpeechActivity("assistant", false);
         this.emit({ type: "state", state: "listening" });
       }
+      this.updatePlaybackCaption();
     };
     this.nextPlayback = Math.max(this.output.currentTime, this.nextPlayback);
     source.start(this.nextPlayback);
     this.nextPlayback += buffer.duration;
+    this.playbackCaptions.schedule(this.nextPlayback - buffer.duration, this.nextPlayback);
+    this.updatePlaybackCaption();
     this.emit({ type: "state", state: "speaking" });
   }
 
@@ -380,11 +453,17 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.sources.clear();
     this.nextPlayback = 0;
     this.assistantTurnOpen = false;
+    this.captionTurnOpen = false;
+    this.playbackCaptions = new PlaybackCaptions();
+    if (this.caption?.speaker === "assistant")
+      this.showCaption({ ...this.caption, activeWord: -1, interim: false });
     this.setSpeechActivity("assistant", false);
   }
 
   private stopMicrophone() {
     this.micGeneration++;
+    this.transcriber.disconnect();
+    this.emit({ type: "caption_status", status: "off" });
     if (this.processor) {
       this.processor.port.onmessage = null;
       this.processor.disconnect();
@@ -427,6 +506,7 @@ export class GeminiLiveProvider implements RealtimeProvider {
             this.setSpeechActivity("user", this.userSpeech.update(level, now));
         }
         this.setSpeechActivity("assistant", this.assistantTurnOpen || this.sources.size > 0);
+        this.updatePlaybackCaption();
       }
       this.meterFrame = requestAnimationFrame(tick);
     };
@@ -446,6 +526,8 @@ export class GeminiLiveProvider implements RealtimeProvider {
     this.emit({ type: "audio_level", speaker: "assistant", level: 0 });
     void this.output?.close();
     this.output = null;
+    this.userTranscript = "";
+    this.showCaption(null);
     this.handledCalls.clear();
     this.cancelledCalls.clear();
     for (const abort of this.pendingCalls.values()) abort.abort();

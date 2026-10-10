@@ -22,6 +22,10 @@ const providerModule = compile("../src/lib/realtime/gemini/GeminiLiveProvider.ts
   ),
   "../audio": compile("../src/lib/realtime/audio.ts"),
   "../speech-activity": compile("../src/lib/realtime/speech-activity.ts"),
+  "../captions": compile("../src/lib/realtime/captions.ts"),
+  "./LiveInputTranscriber": dataModule(
+    "export class LiveInputTranscriber { disconnect() {} resetUtterance() {} }",
+  ),
   "./config": dataModule('export const LIVE_MODEL = "test"; export const liveConfig = {};'),
 });
 const { GeminiLiveProvider } = await import(providerModule);
@@ -113,6 +117,29 @@ test("an explicit interruption stops playback and releases the avatar immediatel
     speechEvents(events).map((event) => event.active),
     [true, false, true],
   );
+});
+
+test("interim user captions display before final transcription without changing conversation history", () => {
+  const { provider, events } = setup();
+  provider.handleMessage({ serverContent: { interimInputTranscription: { text: "I ate an" } } });
+  provider.handleMessage({
+    serverContent: { interimInputTranscription: { text: "I ate an apple" } },
+  });
+  assert.equal(events.filter((e) => e.type === "user_transcript").length, 0);
+  const captions = events.filter((e) => e.type === "caption");
+  assert.equal(captions.at(-1).caption.text, "I ate an apple");
+  assert.equal(captions.at(-1).caption.activeWord, 3);
+  provider.handleMessage({ serverContent: { inputTranscription: { text: "I ate an apple." } } });
+  assert.equal(events.filter((e) => e.type === "user_transcript").length, 1);
+});
+
+test("interrupting playback clears the assistant word highlight", () => {
+  const { provider, events, audio } = setup();
+  audio();
+  provider.handleMessage({ serverContent: { outputTranscription: { text: "Hello there" } } });
+  assert.equal(events.filter((e) => e.type === "caption").at(-1).caption.activeWord, 0);
+  provider.handleMessage({ serverContent: { interrupted: true } });
+  assert.equal(events.filter((e) => e.type === "caption").at(-1).caption.activeWord, -1);
 });
 
 test("a late tool response cannot overwrite newer manual changes or return stale context", async (t) => {
